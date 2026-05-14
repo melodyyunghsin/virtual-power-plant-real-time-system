@@ -477,15 +477,27 @@ def phase2_acceptance(schedule, sporadic_input, proc):
                         break
                 rec["k"][sid] = allocation
             log.append({
-                "job_id":   sid,
-                "accepted": True,
-                "slots":    chosen,
+                "job_id":           sid,
+                "decision":         "accept",
+                "arrival":          r,
+                "release":          r,
+                "deadline":         d_abs,
+                "e":                e,
+                "w":                w,
+                "slots":            chosen,
+                "caused_violation": False,
             })
         else:
             log.append({
-                "job_id":   sid,
-                "accepted": False,
-                "reason":   "no feasible slack window",
+                "job_id":           sid,
+                "decision":         "reject",
+                "arrival":          r,
+                "release":          r,
+                "deadline":         d_abs,
+                "e":                e,
+                "w":                w,
+                "reason":           "no feasible slack window",
+                "caused_violation": False,
             })
             if 1 <= r <= H:
                 schedule[r - 1]["rejected_sporadic"].append(sid)
