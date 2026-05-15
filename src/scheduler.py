@@ -210,7 +210,7 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
     for cj in chg_jobs:
         cid = cj["id"]
         Kchg[cid] = {}
-        for i in proc_ids:
+        for i in bat_ids:
             if i == cj["battery"]:
                 continue
             Kchg[cid][i] = {
