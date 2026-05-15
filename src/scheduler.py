@@ -275,8 +275,8 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
 
         for t in T:
             prob += P[g][t] >= Pmin * u[g][t], f"pmin_{g}_{t}"
-            prob += P[g][t] <= Pmax * u[g][t], f"pmax_{g}_{t}"
-
+            prob += P[g][t] <= (Pmax - RESERVE_PER_GEN) * u[g][t], \
+                    f"pmax_{g}_{t}"
             u_prev = u[g][t - 1] if t > 1 else u_init
             P_prev = P[g][t - 1] if t > 1 else P_init
 
@@ -296,6 +296,19 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
                 prob += u[g][s] >= z_on[g][t], f"ut_{g}_{t}_{s}"
             for s in range(t, min(t + DT - 1, H) + 1):
                 prob += 1 - u[g][s] >= z_off[g][t], f"dt_{g}_{t}_{s}"
+                
+        # C11: if generator was on at t=0 with TN < UT, force on for the
+        # remaining UT - TN hours so the initial up-period completes.
+        TN = int(gd.get("initial_on_time", 0))
+        if u_init == 1 and TN < UT:
+            for t in range(1, min(UT - TN, H) + 1):
+                prob += u[g][t] == 1, f"c11_{g}_{t}"
+ 
+        # C12: symmetric for off-state with TF < DT.
+        TF = int(gd.get("initial_off_time", 0))
+        if u_init == 0 and TF < DT:
+            for t in range(1, min(DT - TF, H) + 1):
+                prob += u[g][t] == 0, f"c12_{g}_{t}"
 
     # ----------------------------------------------------------- renewables
     for pv in pv_ids:
