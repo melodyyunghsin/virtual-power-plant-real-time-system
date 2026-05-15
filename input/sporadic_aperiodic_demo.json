@@ -1,0 +1,19 @@
+{
+  "sporadic": [
+    {"id": "s1", "release": 10, "hard_deadline": 14, "e": 2, "w": 8,  "preempt": 1},
+    {"id": "s2", "release": 22, "hard_deadline": 24, "e": 2, "w": 15, "preempt": 0},
+    {"id": "s3", "release": 50, "hard_deadline": 60, "e": 3, "w": 18, "preempt": 1},
+    {"id": "s4", "release": 68, "hard_deadline": 72, "e": 2, "w": 20, "preempt": 1},
+    {"id": "s5", "release": 5,  "hard_deadline": 8,  "e": 1, "w": 12, "preempt": 1}
+  ],
+  "aperiodic": [
+    {"id": "a1", "release": 7,  "soft_deadline": 15, "e": 2, "w": 6,  "preempt": 1},
+    {"id": "a2", "release": 20, "soft_deadline": 30, "e": 3, "w": 10, "preempt": 1},
+    {"id": "a3", "release": 35, "soft_deadline": 45, "e": 2, "w": 8,  "preempt": 1},
+    {"id": "a4", "release": 40, "soft_deadline": 48, "e": 4, "w": 12, "preempt": 1},
+    {"id": "a5", "release": 55, "soft_deadline": 62, "e": 2, "w": 15, "preempt": 1},
+    {"id": "a6", "release": 60, "soft_deadline": 68, "e": 3, "w": 9,  "preempt": 1},
+    {"id": "a7", "release": 65, "soft_deadline": 70, "e": 1, "w": 14, "preempt": 1},
+    {"id": "a8", "release": 12, "soft_deadline": 20, "e": 2, "w": 11, "preempt": 1}
+  ]
+}
