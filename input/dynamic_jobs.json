@@ -1,0 +1,22 @@
+{
+  "sporadic": [
+    {"id": "s1", "release": 8,  "deadline": 14, "e": 2, "w": 12, "preempt": 1},
+    {"id": "s2", "release": 20, "deadline": 24, "e": 1, "w": 18, "preempt": 0},
+    {"id": "s3", "release": 33, "deadline": 40, "e": 3, "w": 10, "preempt": 1},
+    {"id": "s4", "release": 48, "deadline": 54, "e": 2, "w": 15, "preempt": 0},
+    {"id": "s5", "release": 62, "deadline": 70, "e": 1, "w": 8,  "preempt": 1}
+  ],
+
+  "aperiodic": [
+    {"id": "a1",  "release": 4,  "deadline": 22, "e": 2, "w": 8,  "preempt": 1},
+    {"id": "a2",  "release": 10, "deadline": 30, "e": 3, "w": 10, "preempt": 1},
+    {"id": "a3",  "release": 15, "deadline": 25, "e": 1, "w": 12, "preempt": 1},
+    {"id": "a4",  "release": 22, "deadline": 42, "e": 4, "w": 7,  "preempt": 1},
+    {"id": "a5",  "release": 30, "deadline": 50, "e": 2, "w": 14, "preempt": 0},
+    {"id": "a6",  "release": 38, "deadline": 60, "e": 3, "w": 9,  "preempt": 1},
+    {"id": "a7",  "release": 45, "deadline": 56, "e": 1, "w": 11, "preempt": 1},
+    {"id": "a8",  "release": 52, "deadline": 68, "e": 2, "w": 13, "preempt": 1},
+    {"id": "a9",  "release": 58, "deadline": 72, "e": 4, "w": 6,  "preempt": 1},
+    {"id": "a10", "release": 65, "deadline": 72, "e": 1, "w": 15, "preempt": 0}
+  ]
+}

@@ -24,6 +24,15 @@ def main():
     prices     = load_json("input/price_72hr.json")["price"]
     proc       = load_json("input/processor_settings.json")
 
+    # Demo-time dynamic jobs (sporadic + aperiodic). Falls back to task_set
+    # for backward compatibility when dynamic_jobs.json doesn't exist.
+    dynamic_path = os.path.join(BASE, "input", "dynamic_jobs.json")
+    if os.path.exists(dynamic_path):
+        with open(dynamic_path, encoding="utf-8") as f:
+            dynamic = json.load(f)
+    else:
+        dynamic = {}
+
     price_map = {entry["hour"]: entry["market_price"] for entry in prices}
     gen_cfg   = {g["generator_id"]: g for g in proc["generator"]}
 
@@ -47,8 +56,18 @@ def main():
 
     # ── expand periodic instances ────────────────────────────────────────────
     periodic = task_set.get("periodic", {})
-    sporadic = task_set.get("sporadic", {})
-    aperiodic_tasks = task_set.get("aperiodic", {})
+
+    # Sporadic + aperiodic: prefer dynamic_jobs.json; fall back to task_set.
+    # Normalize both list-of-dict and dict-of-dict formats to dict.
+    def _to_dict(x):
+        if isinstance(x, dict):
+            return x
+        if isinstance(x, list):
+            return {t.get("id", f"j{i}"): t for i, t in enumerate(x)}
+        return {}
+
+    sporadic        = _to_dict(dynamic.get("sporadic",  task_set.get("sporadic",  {})))
+    aperiodic_tasks = _to_dict(dynamic.get("aperiodic", task_set.get("aperiodic", {})))
 
     periodic_instances: list[dict] = []
     completions_by_task: dict[str, list[int]] = {}

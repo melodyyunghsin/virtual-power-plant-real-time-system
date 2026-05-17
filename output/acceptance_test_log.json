@@ -1,3 +1,69 @@
 {
-  "acceptance_test_log": []
+  "acceptance_test_log": [
+    {
+      "job_id": "s1",
+      "decision": "accept",
+      "arrival": 8,
+      "release": 8,
+      "deadline": 14,
+      "e": 2,
+      "w": 12.0,
+      "slots": [
+        8,
+        9
+      ],
+      "caused_violation": false
+    },
+    {
+      "job_id": "s2",
+      "decision": "accept",
+      "arrival": 20,
+      "release": 20,
+      "deadline": 24,
+      "e": 1,
+      "w": 18.0,
+      "slots": [
+        21
+      ],
+      "caused_violation": false
+    },
+    {
+      "job_id": "s3",
+      "decision": "reject",
+      "arrival": 33,
+      "release": 33,
+      "deadline": 40,
+      "e": 3,
+      "w": 10.0,
+      "reason": "no feasible slack window",
+      "caused_violation": false
+    },
+    {
+      "job_id": "s4",
+      "decision": "accept",
+      "arrival": 48,
+      "release": 48,
+      "deadline": 54,
+      "e": 2,
+      "w": 15.0,
+      "slots": [
+        49,
+        50
+      ],
+      "caused_violation": false
+    },
+    {
+      "job_id": "s5",
+      "decision": "accept",
+      "arrival": 62,
+      "release": 62,
+      "deadline": 70,
+      "e": 1,
+      "w": 8.0,
+      "slots": [
+        62
+      ],
+      "caused_violation": false
+    }
+  ]
 }
