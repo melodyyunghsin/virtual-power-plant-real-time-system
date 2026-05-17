@@ -24,9 +24,9 @@ def main():
     prices     = load_json("input/price_72hr.json")["price"]
     proc       = load_json("input/processor_settings.json")
 
-    # Demo-time dynamic jobs (sporadic + aperiodic). Falls back to task_set
-    # for backward compatibility when dynamic_jobs.json doesn't exist.
-    dynamic_path = os.path.join(BASE, "input", "dynamic_jobs.json")
+    # Demo-time dynamic jobs (sporadic + aperiodic). Same file as scheduler reads.
+    # Falls back to task_set for backward compatibility when the file is absent.
+    dynamic_path = os.path.join(BASE, "input", "sporadic_aperiodic_demo.json")
     if os.path.exists(dynamic_path):
         with open(dynamic_path, encoding="utf-8") as f:
             dynamic = json.load(f)

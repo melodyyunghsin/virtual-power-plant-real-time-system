@@ -1,20 +1,20 @@
 {
   "hard_deadline_miss_rate": 0.0,
-  "soft_deadline_miss_rate": 0.0,
+  "soft_deadline_miss_rate": 0.272727,
   "average_tardiness": 0.0,
   "max_tardiness": 0,
-  "average_response_time": 4.2708,
+  "average_response_time": 4.4583,
   "max_response_time": 14,
   "completion_time_jitter": {
-    "p1": 18.2003,
+    "p1": 18.0883,
     "p2": 19.5959,
-    "p3": 23.488,
-    "p4": 22.9497,
-    "p5": 20.8859,
-    "p6": 20.1096,
+    "p3": 23.6696,
+    "p4": 23.0434,
+    "p5": 20.7959,
+    "p6": 19.3735,
     "p7": 22.3607,
     "p8": 20.1715,
-    "p9": 15.9844
+    "p9": 15.5403
   },
   "acceptance_test": {
     "total": 5,
@@ -23,7 +23,7 @@
   },
   "sporadic_value_rate": 1.0,
   "post_acceptance_violation_rate": 0.0,
-  "generator_cost": 301140.0,
-  "market_revenue": 384915.8,
-  "objective_value": -83775.8
+  "generator_cost": 276400.0,
+  "market_revenue": 340694.8,
+  "objective_value": -34294.8
 }

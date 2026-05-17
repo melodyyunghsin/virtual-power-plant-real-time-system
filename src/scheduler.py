@@ -28,8 +28,12 @@ import pulp
 
 H = 72              # planning horizon (hours)
 ALPHA = 10000       # aperiodic miss penalty ($ per miss)
-BIG_M = 10000       # big-M for mutex / disjunctive constraints
 EPS = 1e-6          # numerical zero-threshold for output filtering
+
+# Day-ahead reservation strategy: each on-generator must leave this much
+# headroom (MW) below its output_max, providing spinning reserve that
+# Phase 2 can use to absorb sporadic arrivals without violating ramp limits.
+RESERVE_PER_GEN = 5
 
 ROOT = Path(__file__).resolve().parent.parent
 INPUT_DIR = ROOT / "input"
@@ -45,15 +49,15 @@ def load_inputs():
     price = json.loads((INPUT_DIR / "price_72hr.json").read_text(encoding="utf-8"))
     tasks = json.loads((OUTPUT_DIR / "task_set.json").read_text(encoding="utf-8"))
 
-    # Demo-time input: sporadic + aperiodic jobs.
-    # Optional — pipeline still runs (periodic-only) if the file is absent.
-    dynamic_path = INPUT_DIR / "dynamic_jobs.json"
-    if dynamic_path.exists():
-        dynamic = json.loads(dynamic_path.read_text(encoding="utf-8"))
-    else:
-        dynamic = {}
-
-    return proc, price, tasks, dynamic
+    # Demo-time override: sporadic and aperiodic jobs are provided at the
+    # demo (per spec §1.1 item 3). They live in this optional file so they
+    # don't get tangled with the team-generated periodic task set.
+    demo_path = INPUT_DIR / "sporadic_aperiodic_demo.json"
+    if demo_path.exists():
+        demo = json.loads(demo_path.read_text(encoding="utf-8"))
+        tasks["sporadic"]  = demo.get("sporadic",  [])
+        tasks["aperiodic"] = demo.get("aperiodic", [])
+    return proc, price, tasks
 
 
 def parse_renewable_forecast(proc):
@@ -212,16 +216,14 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
                     f"k_{jid}_{i}_{t}", lowBound=0
                 )
 
-    # Kchg[chg_id][i][t] — battery-charging allocation (i must NOT be the
-    # battery being charged itself; cross-battery charging is allowed but
-    # bounded by mutex on the source battery's discharge mode).
+    # Kchg[chg_id][i][t] — battery-charging allocation.
+    # Constraint C21: charging energy can ONLY come from generators or
+    # renewables (I_g ∪ I_r). Batteries cannot supply other batteries.
     Kchg = {}
     for cj in chg_jobs:
         cid = cj["id"]
         Kchg[cid] = {}
-        for i in proc_ids:
-            if i == cj["battery"]:
-                continue
+        for i in gen_ids + pv_ids:
             Kchg[cid][i] = {
                 t: pulp.LpVariable(f"kchg_{cid}_{i}_{t}", lowBound=0)
                 for t in T
@@ -284,7 +286,10 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
 
         for t in T:
             prob += P[g][t] >= Pmin * u[g][t], f"pmin_{g}_{t}"
-            prob += P[g][t] <= Pmax * u[g][t], f"pmax_{g}_{t}"
+            # C6 + reservation: when on, leave RESERVE_PER_GEN MW of headroom
+            # for Phase 2 sporadic absorption (spinning reserve).
+            prob += P[g][t] <= (Pmax - RESERVE_PER_GEN) * u[g][t], \
+                    f"pmax_{g}_{t}"
 
             u_prev = u[g][t - 1] if t > 1 else u_init
             P_prev = P[g][t - 1] if t > 1 else P_init
@@ -305,6 +310,19 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
                 prob += u[g][s] >= z_on[g][t], f"ut_{g}_{t}_{s}"
             for s in range(t, min(t + DT - 1, H) + 1):
                 prob += 1 - u[g][s] >= z_off[g][t], f"dt_{g}_{t}_{s}"
+
+        # C11: if generator was on at t=0 with TN < UT, force on for the
+        # remaining UT - TN hours so the initial up-period completes.
+        TN = int(gd.get("initial_on_time", 0))
+        if u_init == 1 and TN < UT:
+            for t in range(1, min(UT - TN, H) + 1):
+                prob += u[g][t] == 1, f"c11_{g}_{t}"
+
+        # C12: symmetric for off-state with TF < DT.
+        TF = int(gd.get("initial_off_time", 0))
+        if u_init == 0 and TF < DT:
+            for t in range(1, min(DT - TF, H) + 1):
+                prob += u[g][t] == 0, f"c12_{g}_{t}"
 
     # ----------------------------------------------------------- renewables
     for pv in pv_ids:
@@ -425,91 +443,325 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
 
 
 # =============================================================================
+# Slack Absorber — shared helper for Phase 2 and Phase 3
+# =============================================================================
+
+class SlackAbsorber:
+    """Computes available slack at any hour and commits demand into the
+    schedule. Used by Phase 2 (sporadic acceptance) and Phase 3 (aperiodic
+    queue) so both apply the same physics and bookkeeping.
+
+    Slack sources at hour t:
+      a. Current `sell` value (already-generated power going to market)
+      b. On-generator spinning reserve, respecting ramp limits to t-1, t+1
+         and the generator's output_max
+      c. PV underutilization (capacity*forecast - current output)
+
+    Commit precedence: peel from sell first (no P change), then ramp up
+    generators, then ramp up PVs.
+    """
+
+    def __init__(self, schedule, proc, pv_forecast):
+        self.schedule    = schedule
+        self.pv_forecast = pv_forecast
+        self.gens        = {g["generator_id"]: g for g in proc["generator"]}
+        self.pvs         = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
+        self.gen_ids     = list(self.gens)
+        self.pv_ids      = list(self.pvs)
+
+    def slack_at(self, t):
+        rec = self.schedule[t - 1]
+        s = rec["sell"]
+        for g in self.gen_ids:
+            gd = self.gens[g]
+            p_curr = rec["P"].get(g, 0.0)
+            if p_curr <= EPS:
+                continue
+            p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
+                      else float(gd.get("initial_energy", 0)))
+            p_next = (self.schedule[t]["P"].get(g, 0.0)
+                      if t < len(self.schedule) else p_curr)
+            max_new = min(
+                float(gd["output_max"]),
+                p_prev + gd["ramp_up_rate"],
+                p_next + gd["ramp_down_rate"],
+            )
+            s += max(0.0, max_new - p_curr)
+        for pv in self.pv_ids:
+            cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
+            curr = rec["P"].get(pv, 0.0)
+            s += max(0.0, cap_avail - curr)
+        return s
+
+    def commit_at(self, t, w, target_jid):
+        """Allocate w MW at hour t to target_jid. Returns 0 if fully committed
+        or the residual (>0) if slack was overestimated."""
+        rec = self.schedule[t - 1]
+        remaining = w
+        allocation = {}
+
+        # Step 1: peel from sell
+        if remaining > EPS and rec["sell"] >= EPS:
+            from_sell = min(remaining, rec["sell"])
+            rec["sell"] = round(rec["sell"] - from_sell, 4)
+            already = {i: 0.0 for i in rec["P"]}
+            for k_ent in rec["k"].values():
+                for i, v in k_ent.items():
+                    if i in already:
+                        already[i] += v
+            to_distribute = from_sell
+            for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
+                free = p_val - already.get(i, 0)
+                take = min(to_distribute, free)
+                if take > EPS:
+                    allocation[i] = allocation.get(i, 0) + take
+                    to_distribute -= take
+                if to_distribute <= EPS:
+                    break
+            remaining -= from_sell
+
+        # Step 2: ramp on-generators
+        if remaining > EPS:
+            for g in self.gen_ids:
+                if remaining <= EPS:
+                    break
+                gd = self.gens[g]
+                p_curr = rec["P"].get(g, 0.0)
+                if p_curr <= EPS:
+                    continue
+                p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
+                          else float(gd.get("initial_energy", 0)))
+                p_next = (self.schedule[t]["P"].get(g, 0.0)
+                          if t < len(self.schedule) else p_curr)
+                max_new = min(
+                    float(gd["output_max"]),
+                    p_prev + gd["ramp_up_rate"],
+                    p_next + gd["ramp_down_rate"],
+                )
+                avail = max_new - p_curr
+                if avail <= EPS:
+                    continue
+                take = min(remaining, avail)
+                rec["P"][g] = round(p_curr + take, 4)
+                allocation[g] = round(allocation.get(g, 0) + take, 4)
+                remaining -= take
+
+        # Step 3: ramp PVs
+        if remaining > EPS:
+            for pv in self.pv_ids:
+                if remaining <= EPS:
+                    break
+                cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
+                curr = rec["P"].get(pv, 0.0)
+                avail = cap_avail - curr
+                if avail <= EPS:
+                    continue
+                take = min(remaining, avail)
+                rec["P"][pv] = round(curr + take, 4)
+                allocation[pv] = round(allocation.get(pv, 0) + take, 4)
+                remaining -= take
+
+        clean = {i: round(v, 4) for i, v in allocation.items() if v > EPS}
+        # Merge into any existing entry for this job at this hour
+        if target_jid in rec["k"]:
+            for i, v in clean.items():
+                rec["k"][target_jid][i] = round(
+                    rec["k"][target_jid].get(i, 0) + v, 4
+                )
+        else:
+            rec["k"][target_jid] = clean
+        return remaining
+
+
+# =============================================================================
+# Phase 3 — Aperiodic queue (placeholder; filled in by Batch 4)
+# =============================================================================
+
+def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
+    """Soft-deadline scheduling for aperiodic jobs.
+
+    Aperiodic jobs queue at release and wait for slack. Ordering: earliest
+    soft deadline first (EDF). For each job:
+      1. Try to fit e hours in [release, soft_deadline] (on-time).
+      2. If not, try to fit e hours in [release, H] (late — tardiness > 0).
+      3. If still not, mark as missed with no completion.
+
+    Records completion time and tardiness per job; appends `jid` to the
+    schedule's `missed_aperiodic` list at the soft_deadline hour when
+    miss occurs.
+
+    Mutates `schedule` in place. Returns list of decisions for the log.
+    """
+    log = []
+    if not aperiodic_jobs:
+        return log
+
+    absorber = SlackAbsorber(schedule, proc, pv_forecast)
+
+    # EDF ordering for soft-real-time
+    sorted_jobs = sorted(aperiodic_jobs,
+                         key=lambda j: (j["deadline"], j["release"]))
+
+    for j in sorted_jobs:
+        jid = j["id"]
+        r   = int(j["release"])
+        d   = int(j["deadline"])    # soft deadline (absolute hour)
+        e   = int(j["e"])
+        w   = float(j["w"])
+
+        # ---- attempt on-time placement
+        on_window = list(range(r, min(d, H) + 1))
+        feasible_on = [tt for tt in on_window if absorber.slack_at(tt) >= w - EPS]
+
+        slots = []
+        decision = None
+        if len(feasible_on) >= e:
+            slots = feasible_on[:e]
+            decision = "scheduled_on_time"
+        else:
+            # ---- fall back to late placement in [r, H]
+            late_window = list(range(r, H + 1))
+            feasible_late = [tt for tt in late_window
+                             if absorber.slack_at(tt) >= w - EPS]
+            if len(feasible_late) >= e:
+                slots = feasible_late[:e]
+                decision = "scheduled_late"
+
+        if slots:
+            # Commit. If any hour fails (shouldn't if slack_at is right),
+            # fall through to a "missed/skipped" entry.
+            ok = True
+            for tt in slots:
+                if absorber.commit_at(tt, w, jid) > EPS:
+                    ok = False
+                    break
+            if ok:
+                completion = slots[-1]
+                tardiness  = max(0, completion - d)
+                missed     = (decision == "scheduled_late")
+                log.append({
+                    "job_id":               jid,
+                    "decision":             decision,
+                    "release":              r,
+                    "soft_deadline":        d,
+                    "e":                    e,
+                    "w":                    w,
+                    "slots":                slots,
+                    "completion":           completion,
+                    "tardiness":            tardiness,
+                    "missed_soft_deadline": missed,
+                })
+                if missed and 1 <= d <= H:
+                    schedule[d - 1]["missed_aperiodic"].append(jid)
+                continue
+
+        # ---- no feasible placement at all
+        log.append({
+            "job_id":               jid,
+            "decision":             "skipped",
+            "release":              r,
+            "soft_deadline":        d,
+            "e":                    e,
+            "w":                    w,
+            "slots":                [],
+            "completion":           None,
+            "tardiness":            None,
+            "missed_soft_deadline": True,
+            "reason":               f"no slack window of {e}h with >={w}MW in [{r},{H}]",
+        })
+        if 1 <= d <= H:
+            schedule[d - 1]["missed_aperiodic"].append(jid)
+
+    return log
+
+
+# =============================================================================
 # Phase 2 — Sporadic acceptance test
 # =============================================================================
 
-def phase2_acceptance(schedule, sporadic_input, proc):
-    """For each arriving sporadic job, scan free capacity (current `sell`
-    surplus) within [release, deadline] and try to slot in `e` hours of
-    contiguous (or any, if preempt=1) execution at rate w. Accept if feasible
-    without disturbing periodic jobs already placed.
+def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
+    """Online acceptance test for sporadic jobs (hard deadline).
 
-    Returns log entries; mutates `schedule` in-place.
+    For each arriving sporadic, compute total slack at each candidate hour;
+    accept only if e feasible slots exist in [release, hard_deadline]
+    (contiguous for non-preemptive). If accepted, commit via SlackAbsorber.
+
+    Mutates `schedule` in place. Returns a list of log entries.
     """
     log = []
     if not sporadic_input:
         return log
 
-    items = sporadic_input.items() if isinstance(sporadic_input, dict) else \
-            [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)]
+    absorber = SlackAbsorber(schedule, proc, pv_forecast)
+
+    items = (sporadic_input.items() if isinstance(sporadic_input, dict)
+             else [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)])
 
     for sid, sj in items:
-        sid = str(sid)
+        sid     = str(sid)
         r       = int(sj["release"])
         d_abs   = int(sj.get("hard_deadline", sj.get("deadline", H)))
         e       = int(sj["e"])
         w       = float(sj["w"])
         preempt = int(sj.get("preempt", 1))
 
-        window = [t for t in range(r, min(d_abs, H) + 1)]
-        feasible_slots = [t for t in window if schedule[t - 1]["sell"] >= w - EPS]
+        window = list(range(r, min(d_abs, H) + 1))
 
         chosen = []
+        reason = None
         if preempt == 0:
-            # find e contiguous feasible slots
             for start in range(r, min(d_abs, H) - e + 2):
                 block = list(range(start, start + e))
-                if all(schedule[t - 1]["sell"] >= w - EPS for t in block):
+                if all(absorber.slack_at(tt) >= w - EPS for tt in block):
                     chosen = block
                     break
+            if not chosen:
+                reason = (f"no contiguous block of {e}h with >={w}MW slack "
+                          f"in [{r},{d_abs}]")
         else:
-            if len(feasible_slots) >= e:
-                chosen = feasible_slots[:e]
+            feasible = [tt for tt in window if absorber.slack_at(tt) >= w - EPS]
+            if len(feasible) >= e:
+                chosen = feasible[:e]
+            else:
+                reason = (f"only {len(feasible)} feasible hours, need {e} "
+                          f"(window [{r},{d_abs}], w={w})")
 
         if chosen:
-            # commit: peel `w` MW off `sell` and route through processors
-            # that currently feed sell_share most heavily.
-            for t in chosen:
-                rec = schedule[t - 1]
-                # Reduce sell, add allocation entry for sporadic job.
-                rec["sell"] = round(rec["sell"] - w, 4)
-                # Greedy: take from processors with output (record["P"]),
-                # without breaking energy-balance bookkeeping.
-                remaining = w
-                allocation = {}
-                for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
-                    take = min(remaining, p_val)
-                    if take > EPS:
-                        allocation[i] = round(take, 4)
-                        remaining -= take
-                    if remaining <= EPS:
-                        break
-                rec["k"][sid] = allocation
-            log.append({
-                "job_id":           sid,
-                "decision":         "accept",
-                "arrival":          r,
-                "release":          r,
-                "deadline":         d_abs,
-                "e":                e,
-                "w":                w,
-                "slots":            chosen,
-                "caused_violation": False,
-            })
-        else:
-            log.append({
-                "job_id":           sid,
-                "decision":         "reject",
-                "arrival":          r,
-                "release":          r,
-                "deadline":         d_abs,
-                "e":                e,
-                "w":                w,
-                "reason":           "no feasible slack window",
-                "caused_violation": False,
-            })
-            if 1 <= r <= H:
-                schedule[r - 1]["rejected_sporadic"].append(sid)
+            committed = []
+            for tt in chosen:
+                leftover = absorber.commit_at(tt, w, sid)
+                if leftover > EPS:
+                    reason = f"commit failed at t={tt}, residual={leftover:.3f}"
+                    committed = []
+                    break
+                committed.append(tt)
+            if committed:
+                log.append({
+                    "job_id":           sid,
+                    "decision":         "accept",
+                    "arrival":          r,
+                    "release":          r,
+                    "deadline":         d_abs,
+                    "e":                e,
+                    "w":                w,
+                    "slots":            committed,
+                    "caused_violation": False,
+                })
+                continue
+
+        log.append({
+            "job_id":           sid,
+            "decision":         "reject",
+            "arrival":          r,
+            "release":          r,
+            "deadline":         d_abs,
+            "e":                e,
+            "w":                w,
+            "reason":           reason or "insufficient slack",
+            "caused_violation": False,
+        })
+        if 1 <= r <= H:
+            schedule[r - 1]["rejected_sporadic"].append(sid)
 
     return log
 
@@ -518,7 +770,7 @@ def phase2_acceptance(schedule, sporadic_input, proc):
 # Output writing
 # =============================================================================
 
-def write_outputs(schedule, acceptance_log):
+def write_outputs(schedule, acceptance_log, aperiodic_log):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     sched_path = OUTPUT_DIR / "schedule_result.json"
@@ -528,11 +780,14 @@ def write_outputs(schedule, acceptance_log):
 
     log_path = OUTPUT_DIR / "acceptance_test_log.json"
     with open(log_path, "w", encoding="utf-8") as f:
-        json.dump({"acceptance_test_log": acceptance_log}, f, indent=2)
+        json.dump({
+            "acceptance_test_log": acceptance_log,
+            "aperiodic_log":       aperiodic_log,
+        }, f, indent=2)
     print(f"  wrote {log_path}")
 
 
-def print_summary(schedule, obj, real_jobs):
+def print_summary(schedule, obj, periodic_jobs, aperiodic_jobs, sporadic_input):
     total_sell = sum(r["sell"] for r in schedule)
     on_hours = {i: 0 for r in schedule for i in r["P"]}
     for r in schedule:
@@ -543,7 +798,9 @@ def print_summary(schedule, obj, real_jobs):
     print("=" * 60)
     print(f"  Total objective       : {obj:.2f}")
     print(f"  Total energy sold     : {total_sell:.2f} MWh")
-    print(f"  Jobs scheduled        : {len(real_jobs)}")
+    print(f"  Periodic instances    : {len(periodic_jobs)}")
+    print(f"  Aperiodic in queue    : {len(aperiodic_jobs)}")
+    print(f"  Sporadic inbound      : {len(sporadic_input)}")
     print(f"  Active hours per proc :")
     for i, h in sorted(on_hours.items(), key=lambda kv: -kv[1]):
         print(f"    {i:<14}  {h:>3} h")
@@ -555,31 +812,36 @@ def print_summary(schedule, obj, real_jobs):
 # =============================================================================
 
 def main():
-    proc, price_data, task_set, dynamic = load_inputs()
+    proc, price_data, task_set = load_inputs()
     pv_forecast = parse_renewable_forecast(proc)
     price_arr   = parse_price(price_data)
 
-    # Periodic always comes from task_set.json (generated by task_generator.py).
-    # Sporadic + aperiodic come from input/dynamic_jobs.json at demo time;
-    # if that file is absent we fall back to task_set.json for backward compat.
     periodic_jobs  = expand_periodic(task_set.get("periodic", {}))
-    aperiodic_in   = dynamic.get("aperiodic", task_set.get("aperiodic", []))
-    sporadic_input = dynamic.get("sporadic",  task_set.get("sporadic",  []))
-    aperiodic_jobs = expand_aperiodic(aperiodic_in)
+    aperiodic_jobs = expand_aperiodic(task_set.get("aperiodic", []))
+    sporadic_input = task_set.get("sporadic", [])
 
-    real_jobs = periodic_jobs + aperiodic_jobs
+    # Phase 1 schedules only periodic jobs (the day-ahead static schedule).
+    # Per spec assumption 6, aperiodic and sporadic jobs arrive during
+    # execution; they are handled in Phase 2 (sporadic acceptance) and
+    # Phase 3 (aperiodic queue) respectively.
     print(f"[Input] {len(periodic_jobs)} periodic instances, "
           f"{len(aperiodic_jobs)} aperiodic, "
           f"{len(sporadic_input)} sporadic inbound")
 
     schedule, obj = phase1_static_schedule(
-        proc, pv_forecast, price_arr, real_jobs
+        proc, pv_forecast, price_arr, periodic_jobs
     )
 
-    acceptance_log = phase2_acceptance(schedule, sporadic_input, proc)
+    acceptance_log = phase2_acceptance(
+        schedule, sporadic_input, proc, pv_forecast
+    )
 
-    write_outputs(schedule, acceptance_log)
-    print_summary(schedule, obj, real_jobs)
+    aperiodic_log = phase3_aperiodic(
+        schedule, aperiodic_jobs, proc, pv_forecast
+    )
+
+    write_outputs(schedule, acceptance_log, aperiodic_log)
+    print_summary(schedule, obj, periodic_jobs, aperiodic_jobs, sporadic_input)
 
 
 if __name__ == "__main__":
