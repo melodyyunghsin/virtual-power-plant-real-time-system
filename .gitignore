@@ -1,2 +1,4 @@
 # claude permissions
 .claude/
+
+.DS_Store
