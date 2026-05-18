@@ -20,6 +20,11 @@ def run_verifier():
     try:
         proc = load_json(INPUT_DIR / "processor_settings.json")
         tasks = load_json(OUTPUT_DIR / "task_set.json")
+        demo_path = INPUT_DIR / "sporadic_aperiodic_demo.json"
+        if demo_path.exists():
+            demo = json.loads(open(demo_path).read())
+            tasks["sporadic"] = demo.get("sporadic", [])
+            tasks["aperiodic"] = demo.get("aperiodic", [])
         sched = load_json(OUTPUT_DIR / "schedule_result.json")["schedule_result"]
     except Exception as e:
         print(f"[錯誤] 無法讀取檔案: {e}")
@@ -42,7 +47,11 @@ def run_verifier():
             all_tasks.update(tasks["sporadic"])
         else:
             all_tasks.update({t.get("id", f"s{i}"): t for i, t in enumerate(tasks["sporadic"])})
-
+    if "aperiodic" in tasks: 
+        if isinstance(tasks["aperiodic"], dict):
+            all_tasks.update(tasks["aperiodic"])
+        else:
+            all_tasks.update({t.get("id", f"a{i}"): t for i, t in enumerate(tasks["aperiodic"])})
     violations = []
     def log_violation(constraint_id, msg):
         violations.append(f"[C{constraint_id}] {msg}")
@@ -177,12 +186,13 @@ def run_verifier():
             if soc_val < bat["soc_min"] - EPS or soc_val > bat["soc_max"] + EPS:
                 log_violation(17, f"t={t} 電池 {bid} SOC {soc_val} 越界 [{bat['soc_min']}, {bat['soc_max']}]")
 
-            # [C16] SOC 動態更新檢查 (需依賴上一個時段，為簡化這裡直接用排程回傳的數值檢查邏輯連續性)
-            if t > 1:
-                prev_soc = sched[t_idx-1].get("soc", {}).get(bid, bat["soc_init"])
-                expected_soc = prev_soc + chg_val - dis_val
-                if abs(soc_val - expected_soc) > EPS:
-                    log_violation(16, f"t={t} 電池 {bid} SOC 追蹤異常: 預期 {expected_soc}, 實際 {soc_val}")
+            # [C16] SOC 動態更新檢查
+            # t=1 邊界用 bat["soc_init"]；其餘用前一時段的 soc
+            prev_soc = (sched[t_idx-1]["soc"].get(bid, bat["soc_init"])
+                        if t > 1 else bat["soc_init"])
+            expected_soc = prev_soc + chg_val - dis_val
+            if abs(soc_val - expected_soc) > EPS:
+                log_violation(16, f"t={t} 電池 {bid} SOC 追蹤異常: 預期 {expected_soc}, 實際 {soc_val}")
 
     
     # ---------------------------------------------------------
@@ -195,10 +205,13 @@ def run_verifier():
         if not task_info: continue
 
         # 取得任務的基本參數
-        r_time = task_info.get("r", 0)  # 到達時間
-        period = task_info.get("p")     # 週期
+        # Periodic 用 "r" / "d" (相對 deadline)；sporadic/aperiodic 用
+        # "release" / "hard_deadline" / "soft_deadline" (絕對 deadline)
+        r_time = task_info.get("r", task_info.get("release", 0))
+        period = task_info.get("p")     # 週期 (僅 periodic 有)
         e_time = task_info.get("e")     # 預期執行時間
-        d_rel = task_info.get("d") or task_info.get("deadline") # 相對 deadline
+        d_rel  = task_info.get("d")     # 相對 deadline (僅 periodic 有)
+        d_abs  = task_info.get("hard_deadline") or task_info.get("soft_deadline")
         is_non_preemptive = (task_info.get("preempt") == 0)
 
         # 1. 將時間點依照「週期」分群 (針對週期性任務)
@@ -211,7 +224,7 @@ def run_verifier():
                     instances[k] = []
                 instances[k].append(t)
         else:
-            # 若不是週期性任務(Sporadic)，預設視為同一個 Instance
+            # 若不是週期性任務(Sporadic/Aperiodic)，預設視為同一個 Instance
             instances[0] = hours
 
         # 2. 針對每個週期 (Instance) 獨立檢查
@@ -233,14 +246,20 @@ def run_verifier():
                 log_violation(5, f"Job {job_name} 執行時數異常: 實際 {len(inst_hours)} 小時，應為 {e_time} 小時")
 
             # Deadline 檢查
-            if d_rel is not None:
-                # 該週期的絕對 Deadline = 初始到達時間 + (k * 週期) + 相對Deadline
-                abs_deadline = r_time + (k * period) + d_rel if period else r_time + d_rel
-                
-                # 假設 t=19 代表在 19~20 執行，結束於 20。若 abs_deadline 是 20，則 t=19 是合法的。
-                # 所以如果 end_time >= abs_deadline (例如 t=20, 代表 20~21執行)，就代表違規。
-                if end_time >= abs_deadline:
+            # Periodic: 該週期的絕對 deadline = r + k*period + d_rel - 1
+            #   (依 spec C3, 執行窗 [r, r+d-1]，最後可執行時段為 r+d-1)
+            # Sporadic/Aperiodic: 直接用絕對 deadline，最後可執行時段 = d_abs
+            if period and d_rel is not None:
+                abs_deadline = r_time + (k * period) + d_rel - 1
+                if end_time > abs_deadline:
                     log_violation(5, f"Job {job_name} 違反 Deadline: 執行至 t={end_time}，超出絕對期限 {abs_deadline}")
+            elif (not period) and d_abs is not None:
+                if end_time > d_abs:
+                    # Aperiodic 是 soft deadline → 不算違規，只是 tardiness > 0
+                    if task_info.get("soft_deadline") is not None:
+                        pass  # 軟截止，由 evaluator 計算 tardiness
+                    else:
+                        log_violation(5, f"Job {job_name} 違反 Hard Deadline: 執行至 t={end_time}，超出絕對期限 {d_abs}")
 
     # ---------------------------------------------------------
     # 輸出報告

@@ -1,20 +1,20 @@
 {
   "hard_deadline_miss_rate": 0.0,
-  "soft_deadline_miss_rate": 0.272727,
-  "average_tardiness": 0.0,
-  "max_tardiness": 0,
-  "average_response_time": 4.8333,
+  "soft_deadline_miss_rate": 0.375,
+  "average_tardiness": 0.0714,
+  "max_tardiness": 2,
+  "average_response_time": 4.8214,
   "max_response_time": 15,
   "completion_time_jitter": {
-    "p1": 17.7394,
-    "p2": 19.5959,
-    "p3": 22.9823,
-    "p4": 23.0434,
-    "p5": 20.8859,
-    "p6": 19.5492,
-    "p7": 22.3607,
-    "p8": 17.5942,
-    "p9": 16.225
+    "p1": 3.8324,
+    "p2": 0.0,
+    "p3": 5.7609,
+    "p4": 3.3541,
+    "p5": 0.8165,
+    "p6": 1.8725,
+    "p7": 0.0,
+    "p8": 1.2472,
+    "p9": 2.1213
   },
   "acceptance_test": {
     "total": 5,

@@ -20,7 +20,9 @@ def population_std(values: list[float]) -> float:
 def main():
     task_set   = load_json("output/task_set.json")
     schedule   = load_json("output/schedule_result.json")["schedule_result"]
-    acc_log    = load_json("output/acceptance_test_log.json")["acceptance_test_log"]
+    acc_full   = load_json("output/acceptance_test_log.json")
+    acc_log    = acc_full["acceptance_test_log"]
+    aperiodic_log = acc_full.get("aperiodic_log", [])
     prices     = load_json("input/price_72hr.json")["price"]
     proc       = load_json("input/processor_settings.json")
 
@@ -81,7 +83,8 @@ def main():
             chunk = hours[i * e : (i + 1) * e]
             completion = max(chunk)
             release  = r + i * p_val
-            deadline = release + d
+            # Spec C3: execution window is [r, r+d-1]; last allowed slot = r+d-1
+            deadline = release + d - 1
             periodic_instances.append({
                 "task_id":    tid,
                 "instance":   i,
@@ -112,9 +115,27 @@ def main():
             "caused_violation": entry.get("caused_violation", False),
         })
 
+    # ── aperiodic instances from phase-3 log ─────────────────────────────────
+    # Each entry has decision ∈ {scheduled_on_time, scheduled_late, skipped}
+    # plus release / soft_deadline / completion / tardiness.
+    aperiodic_instances: list[dict] = []
+    for entry in aperiodic_log:
+        aperiodic_instances.append({
+            "job_id":     entry["job_id"],
+            "release":    entry.get("release"),
+            "deadline":   entry.get("soft_deadline"),  # soft, absolute
+            "e":          entry.get("e", 0),
+            "completion": entry.get("completion"),  # None if skipped
+            "missed":     entry.get("missed_soft_deadline", False),
+        })
+
     # ── all hard-deadline job records ────────────────────────────────────────
     hard_jobs = periodic_instances + [
         s for s in sporadic_instances if s["completion"] is not None
+    ]
+    # All jobs with a deadline that actually completed (for tardiness/response)
+    all_completed_jobs = hard_jobs + [
+        a for a in aperiodic_instances if a["completion"] is not None
     ]
 
     # ── METRIC: hard_deadline_miss_rate ──────────────────────────────────────
@@ -122,28 +143,34 @@ def main():
     hard_deadline_miss_rate = hard_misses / len(hard_jobs) if hard_jobs else 0.0
 
     # ── METRIC: soft_deadline_miss_rate ─────────────────────────────────────
-    total_missed_ap = len(missed_aperiodic_ids)
-    completed_ap = sum(
-        len(job_hours.get(jid, [])) // task.get("e", 1)
-        for jid, task in aperiodic_tasks.items()
-    )
+    total_missed_ap = sum(1 for a in aperiodic_instances if a["missed"])
     total_ap = len(aperiodic_tasks)
     soft_deadline_miss_rate = total_missed_ap / total_ap if total_ap > 0 else 0.0
 
-    # ── METRIC: tardiness ────────────────────────────────────────────────────
-    tardiness_vals = [max(0, j["completion"] - j["deadline"]) for j in hard_jobs]
+    # ── METRIC: tardiness  T_j = max(0, C_j - d_j) ───────────────────────────
+    # Spec rubric 5-3: applies to any job with a deadline.
+    tardiness_vals = [max(0, j["completion"] - j["deadline"])
+                      for j in all_completed_jobs]
     avg_tardiness = sum(tardiness_vals) / len(tardiness_vals) if tardiness_vals else 0.0
     max_tardiness = max(tardiness_vals) if tardiness_vals else 0.0
 
-    # ── METRIC: response time ────────────────────────────────────────────────
-    response_vals = [j["completion"] - j["release"] for j in hard_jobs]
+    # ── METRIC: response time  R_j = C_j - r_j ───────────────────────────────
+    response_vals = [j["completion"] - j["release"] for j in all_completed_jobs]
     avg_response_time = sum(response_vals) / len(response_vals) if response_vals else 0.0
     max_response_time = max(response_vals) if response_vals else 0.0
 
-    # ── METRIC: completion_time_jitter (per-task population std) ─────────────
+    # ── METRIC: completion_time_jitter ───────────────────────────────────────
+    # Defined as the population std of response times (R_j = C_j - r_j) across
+    # instances of the same periodic task. Raw completion times span the whole
+    # horizon and would yield meaninglessly large numbers.
+    response_by_task: dict[str, list[int]] = {}
+    for j in periodic_instances:
+        response_by_task.setdefault(j["task_id"], []).append(
+            j["completion"] - j["release"]
+        )
     completion_time_jitter = {
-        tid: round(population_std(comps), 4)
-        for tid, comps in completions_by_task.items()
+        tid: round(population_std(rs), 4)
+        for tid, rs in response_by_task.items()
     }
 
     # ── METRIC: acceptance_test ──────────────────────────────────────────────
@@ -234,18 +261,29 @@ def main():
     print(f"  soft_deadline_miss_rate: {soft_deadline_miss_rate:.4%}")
 
     print(f"\n── Tardiness  (Tj = max(0, Cj-dj)) ──")
+    print(f"  Jobs counted (periodic + sporadic + aperiodic): {len(all_completed_jobs)}")
     print(f"  average_tardiness:  {avg_tardiness:.4f} h")
     print(f"  max_tardiness:      {max_tardiness:.4f} h")
+    # Break out by category for transparency
+    hard_tardy = [max(0, j["completion"] - j["deadline"]) for j in hard_jobs]
+    soft_tardy = [max(0, a["completion"] - a["deadline"])
+                  for a in aperiodic_instances if a["completion"] is not None]
+    print(f"  hard-jobs avg / max:   "
+          f"{(sum(hard_tardy)/len(hard_tardy)) if hard_tardy else 0:.4f} / "
+          f"{max(hard_tardy) if hard_tardy else 0:.4f} h")
+    print(f"  soft (aperiodic) avg / max: "
+          f"{(sum(soft_tardy)/len(soft_tardy)) if soft_tardy else 0:.4f} / "
+          f"{max(soft_tardy) if soft_tardy else 0:.4f} h")
 
     print(f"\n── Response Time  (Rj = Cj - rj) ──")
     print(f"  average_response_time:  {avg_response_time:.4f} h")
     print(f"  max_response_time:      {max_response_time:.4f} h")
 
-    print(f"\n── Completion-Time Jitter (population std per task) ──")
+    print(f"\n── Completion-Time Jitter (population std of response time) ──")
     for tid in sorted(completion_time_jitter):
-        comps = completions_by_task.get(tid, [])
+        rs = response_by_task.get(tid, [])
         print(f"  {tid}: {completion_time_jitter[tid]:.4f} h  "
-              f"(instances: {comps})")
+              f"(R_j: {rs})")
 
     print(f"\n── Sporadic Acceptance Test ──")
     print(f"  Total arrived:  {acceptance_test['total']}")

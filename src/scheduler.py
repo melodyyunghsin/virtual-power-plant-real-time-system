@@ -602,30 +602,51 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
     sorted_jobs = sorted(aperiodic_jobs,
                          key=lambda j: (j["deadline"], j["release"]))
 
-    for j in sorted_jobs:
-        jid = j["id"]
-        r   = int(j["release"])
-        d   = int(j["deadline"])    # soft deadline (absolute hour)
-        e   = int(j["e"])
-        w   = float(j["w"])
+    def _find_contiguous(r_lo, r_hi, e_len, w_need):
+        """Find first e_len contiguous hours in [r_lo, r_hi] with slack ≥ w_need.
+        Returns the list of slots or [] if none."""
+        for start in range(r_lo, r_hi - e_len + 2):
+            block = list(range(start, start + e_len))
+            if all(absorber.slack_at(tt) >= w_need - EPS for tt in block):
+                return block
+        return []
 
-        # ---- attempt on-time placement
-        on_window = list(range(r, min(d, H) + 1))
-        feasible_on = [tt for tt in on_window if absorber.slack_at(tt) >= w - EPS]
+    for j in sorted_jobs:
+        jid     = j["id"]
+        r       = int(j["release"])
+        d       = int(j["deadline"])    # soft deadline (absolute hour)
+        e       = int(j["e"])
+        w       = float(j["w"])
+        preempt = int(j.get("preempt", 1))
 
         slots = []
         decision = None
-        if len(feasible_on) >= e:
-            slots = feasible_on[:e]
-            decision = "scheduled_on_time"
+
+        if preempt == 0:
+            # Non-preemptive aperiodic: need e contiguous hours (spec C5)
+            slots = _find_contiguous(r, min(d, H), e, w)
+            if slots:
+                decision = "scheduled_on_time"
+            else:
+                # fall back to late placement in [r, H]
+                slots = _find_contiguous(r, H, e, w)
+                if slots:
+                    decision = "scheduled_late"
         else:
-            # ---- fall back to late placement in [r, H]
-            late_window = list(range(r, H + 1))
-            feasible_late = [tt for tt in late_window
-                             if absorber.slack_at(tt) >= w - EPS]
-            if len(feasible_late) >= e:
-                slots = feasible_late[:e]
-                decision = "scheduled_late"
+            # Preemptive: any e feasible hours suffice
+            on_window = list(range(r, min(d, H) + 1))
+            feasible_on = [tt for tt in on_window
+                           if absorber.slack_at(tt) >= w - EPS]
+            if len(feasible_on) >= e:
+                slots = feasible_on[:e]
+                decision = "scheduled_on_time"
+            else:
+                late_window = list(range(r, H + 1))
+                feasible_late = [tt for tt in late_window
+                                 if absorber.slack_at(tt) >= w - EPS]
+                if len(feasible_late) >= e:
+                    slots = feasible_late[:e]
+                    decision = "scheduled_late"
 
         if slots:
             # Commit. If any hour fails (shouldn't if slack_at is right),
