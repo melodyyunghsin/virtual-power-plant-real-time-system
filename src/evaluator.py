@@ -127,7 +127,7 @@ def main():
         len(job_hours.get(jid, [])) // task.get("e", 1)
         for jid, task in aperiodic_tasks.items()
     )
-    total_ap = total_missed_ap + completed_ap
+    total_ap = len(aperiodic_tasks)
     soft_deadline_miss_rate = total_missed_ap / total_ap if total_ap > 0 else 0.0
 
     # ── METRIC: tardiness ────────────────────────────────────────────────────
