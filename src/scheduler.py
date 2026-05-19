@@ -72,12 +72,47 @@ def parse_renewable_forecast(proc):
     return forecasts
 
 
+def parse_renewable_actuals(proc):
+    """Returns {pv_id: list[H+1] of actual fractions}, 1-indexed.
+    Falls back to pv_forecast when pv_actual is absent (Level 1 compatibility)."""
+    actuals = {}
+    for entry in proc["renewable_forecast"]:
+        for pv_id, points in entry.items():
+            arr = [0.0] * (H + 1)
+            for v in points:
+                arr[int(v["hour"])] = float(v.get("pv_actual", v["pv_forecast"]))
+            actuals[pv_id] = arr
+    return actuals
+
+
+def parse_forecast_error_std(proc):
+    """Returns the forecast_error_std scalar (same for all renewables/hours)."""
+    for entry in proc["renewable_forecast"]:
+        for pv_id, points in entry.items():
+            for v in points:
+                return float(v.get("forecast_error_std", 0.0))
+    return 0.0
+
+
 def parse_price(price):
     """Returns list[H+1] of $/MWh, 1-indexed."""
     arr = [0.0] * (H + 1)
     for v in price["price"]:
         arr[int(v["hour"])] = float(v["market_price"])
     return arr
+
+
+def parse_price_extended(price):
+    """Returns (cancel_rate, rt_factors list[H+1]) from price file.
+    Defaults to cancel_rate=0.0 and factors=1.0 if fields are absent."""
+    cancel_rate = 0.0
+    rt_factors = [1.0] * (H + 1)
+    for v in price["price"]:
+        t = int(v["hour"])
+        rt_factors[t] = float(v.get("realtime_price_factor", 1.0))
+        if cancel_rate == 0.0:
+            cancel_rate = float(v.get("cancellation_penalty_rate", 0.0))
+    return cancel_rate, rt_factors
 
 
 # =============================================================================
@@ -147,7 +182,8 @@ def expand_aperiodic(aperiodic_set):
 # Phase 1 — Day-ahead static schedule (ILP)
 # =============================================================================
 
-def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
+def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
+                           cancel_rate=0.0, pv_actual=None, err_std=0.0):
     generators = proc["generator"]
     renewables = proc["renewable_capacity"]
     batteries  = proc["storage"]
@@ -178,10 +214,13 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
     chg   = pulp.LpVariable.dicts("chg",   (bat_ids, T), lowBound=0)
     dis   = pulp.LpVariable.dicts("dis",   (bat_ids, T), lowBound=0)
     soc   = pulp.LpVariable.dicts("soc",   (bat_ids, T), lowBound=0)
-    v_chg = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary")
+    v_chg   = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary")
+    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1)
 
     sell        = pulp.LpVariable.dicts("sell",       T, lowBound=0)
     sell_share  = pulp.LpVariable.dicts("sellshare",  (proc_ids, T), lowBound=0)
+    commit      = pulp.LpVariable.dicts("commit",     T, lowBound=0)
+    pen         = pulp.LpVariable.dicts("pen",        T, lowBound=0)
 
     # job execution variables (only inside [release, deadline] window)
     x = {}   # x[jid][t]
@@ -235,8 +274,12 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
         gen_by_id[g]["cost_fixed"]    * u[g][t]
         + gen_by_id[g]["cost_variable"] * P[g][t]
         for g in gen_ids for t in T
+    ) + pulp.lpSum(
+        float(bat_by_id[b].get("aging_cost", 0.0)) * P[b][t]
+        for b in bat_ids for t in T
     )
-    f3 = -pulp.lpSum(price_arr[t] * sell[t] for t in T)
+    f3 = (-pulp.lpSum(price_arr[t] * sell[t] for t in T)
+          + pulp.lpSum(cancel_rate * price_arr[t] * pen[t] for t in T))
     prob += ALPHA * f1 + f2 + f3, "TotalCost"
 
     # ----------------------------------------------------------- job execution
@@ -325,25 +368,42 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
                 prob += u[g][t] == 0, f"c12_{g}_{t}"
 
     # ----------------------------------------------------------- renewables
+    # C13 with robust tightening: reduce available PV by forecast_error_std
+    # as a safety margin against forecast over-estimation (Assumption I).
+    robust_factor = 1.0 - err_std
     for pv in pv_ids:
         cap = pv_by_id[pv]["capacity"]
         fc  = pv_forecast[pv]
         for t in T:
-            prob += P[pv][t] <= cap * fc[t], f"pvmax_{pv}_{t}"
+            prob += P[pv][t] <= cap * fc[t] * robust_factor, f"pvmax_{pv}_{t}"
 
     # ----------------------------------------------------------- batteries
     for b in bat_ids:
-        bd = bat_by_id[b]
-        soc_min, soc_max = bd["soc_min"],     bd["soc_max"]
-        chg_max, dis_max = bd["charge_max"],  bd["discharge_max"]
+        bd      = bat_by_id[b]
+        soc_min, soc_max = bd["soc_min"],    bd["soc_max"]
+        chg_max, dis_max = bd["charge_max"], bd["discharge_max"]
         soc_init         = bd["soc_init"]
+        eta_c  = float(bd.get("charge_efficiency",    1.0))
+        eta_d  = float(bd.get("discharge_efficiency", 1.0))
+        sigma  = float(bd.get("self_discharge_rate",  0.0))
+        sfrac_init = min(1.0, soc_init / (0.3 * soc_max))
+
         for t in T:
-            prob += chg[b][t] <= chg_max * v_chg[b][t],     f"cmx_{b}_{t}"
+            prob += chg[b][t] <= chg_max * v_chg[b][t],       f"cmx_{b}_{t}"
             prob += dis[b][t] <= dis_max * (1 - v_chg[b][t]), f"dmx_{b}_{t}"
             prob += soc[b][t] >= soc_min, f"smin_{b}_{t}"
             prob += soc[b][t] <= soc_max, f"smax_{b}_{t}"
+            # C16 L2: SOC dynamics with round-trip efficiency and self-discharge
             prev = soc[b][t - 1] if t > 1 else soc_init
-            prob += soc[b][t] == prev + chg[b][t] - dis[b][t], f"sdyn_{b}_{t}"
+            prob += (soc[b][t] ==
+                     prev * (1 - sigma)
+                     + chg[b][t] * eta_c
+                     - dis[b][t] / eta_d), f"sdyn_{b}_{t}"
+            # soc_frac ∈ [0,1]: upper-bounded by SOC/(0.3*soc_max)
+            prob += soc_frac[b][t] * (0.3 * soc_max) <= soc[b][t], f"sfrac_ub_{b}_{t}"
+            # SOC-dependent discharge limit uses previous-hour soc_frac
+            prev_sfrac = soc_frac[b][t - 1] if t > 1 else sfrac_init
+            prob += dis[b][t] <= dis_max * prev_sfrac, f"sdeplim_{b}_{t}"
             prob += P[b][t] == dis[b][t], f"pdis_{b}_{t}"
 
     # ----------------------------------------------------------- balance
@@ -364,6 +424,12 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
     for t in T:
         prob += sell[t] == pulp.lpSum(sell_share[i][t] for i in proc_ids), \
                 f"sellsum_{t}"
+
+    # ---- commitment constraints (Assumption III: flexible market mechanism) --
+    for t in T:
+        prob += commit[t] <= sell[t],               f"commit_le_sell_{t}"
+        prob += commit[t] == sell[t],               f"commit_eq_sell_{t}"  # static schedule
+        prob += pen[t] >= commit[t] - sell[t],      f"pen_lb_{t}"
 
     # ------------------------------------------------------------ solve
     n_vars = len(prob.variables())
@@ -390,12 +456,16 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
 
     schedule = []
     for t in T:
+        _pv_act = pv_actual if pv_actual is not None else pv_forecast
         rec = {
             "t":                 t,
             "P":                 {},
             "k":                 {},
             "sell":              round(val(sell[t]), 4),
+            "day_ahead_commit":  round(val(commit[t]), 4),
             "soc":               {b: round(val(soc[b][t]), 4) for b in bat_ids},
+            "pv_forecast":       {pv: round(pv_forecast[pv][t], 4) for pv in pv_ids},
+            "pv_actual":         {pv: round(_pv_act[pv][t], 4) for pv in pv_ids},
             "missed_aperiodic":  [],
             "rejected_sporadic": [],
         }
@@ -504,6 +574,11 @@ class SlackAbsorber:
         if remaining > EPS and rec["sell"] >= EPS:
             from_sell = min(remaining, rec["sell"])
             rec["sell"] = round(rec["sell"] - from_sell, 4)
+            # keep day_ahead_commit in sync (static mode: commit tracks actual delivery)
+            if "day_ahead_commit" in rec:
+                rec["day_ahead_commit"] = round(
+                    max(0.0, rec["day_ahead_commit"] - from_sell), 4
+                )
             already = {i: 0.0 for i in rec["P"]}
             for k_ent in rec["k"].values():
                 for i, v in k_ent.items():
@@ -574,23 +649,26 @@ class SlackAbsorber:
 
 
 # =============================================================================
-# Phase 3 — Aperiodic queue (placeholder; filled in by Batch 4)
+# Phase 3 — Aperiodic queue
 # =============================================================================
 
 def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
-    """Soft-deadline scheduling for aperiodic jobs.
+    """Soft-deadline scheduling for aperiodic jobs (EDF order).
 
-    Aperiodic jobs queue at release and wait for slack. Ordering: earliest
-    soft deadline first (EDF). For each job:
-      1. Try to fit e hours in [release, soft_deadline] (on-time).
-      2. If not, try to fit e hours in [release, H] (late — tardiness > 0).
-      3. If still not, mark as missed with no completion.
+    Two-attempt strategy per job:
+      Attempt 1 — normal slack
+        slack[t] = sell[t] + on-generator spinning reserve + PV under-use.
+        Try to fit e hours within [release, soft_deadline]; if not possible,
+        try within [release, H] (late placement).
 
-    Records completion time and tardiness per job; appends `jid` to the
-    schedule's `missed_aperiodic` list at the soft_deadline hour when
-    miss occurs.
+      Attempt 2 — sell borrow (only if attempt 1 found no on-time slots)
+        Effective slack[t] += min(extra_borrow[t], original_sell[t] * 0.5)
+        where extra_borrow[t] = max(0, sell_before_commit - orig_sell[t] * 0.5).
+        Commit pre-diverts the extra portion of sell to the job before calling
+        the normal commit path for the remainder.
+        Log entries set via_sell_borrow=True when this path is taken.
 
-    Mutates `schedule` in place. Returns list of decisions for the log.
+    Mutates `schedule` in place. Returns list of log decisions.
     """
     log = []
     if not aperiodic_jobs:
@@ -598,18 +676,109 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
 
     absorber = SlackAbsorber(schedule, proc, pv_forecast)
 
-    # EDF ordering for soft-real-time
+    # Snapshot of sell values produced by Phase 1+2 (before any Phase 3 commits).
+    # Used as the reference for the 50%-of-original sell-borrow cap.
+    original_sell: dict[int, float] = {
+        t: schedule[t - 1]["sell"] for t in range(1, H + 1)
+    }
+
     sorted_jobs = sorted(aperiodic_jobs,
                          key=lambda j: (j["deadline"], j["release"]))
 
-    def _find_contiguous(r_lo, r_hi, e_len, w_need):
-        """Find first e_len contiguous hours in [r_lo, r_hi] with slack ≥ w_need.
-        Returns the list of slots or [] if none."""
+    # ------------------------------------------------------------------ helpers
+
+    def _extra_borrow(t: int) -> float:
+        """Extra MW Phase 3 may still divert from sell at hour t.
+
+        Phase 3 is allowed to reduce sell[t] by at most 50 % of original_sell[t].
+        Already borrowed = original_sell[t] - current_sell[t].
+        Remaining = max(0, 50 % × original - already borrowed)
+                  = max(0, current_sell[t] - original_sell[t] × 0.5).
+        """
+        current = schedule[t - 1]["sell"]
+        orig    = original_sell[t]
+        return max(0.0, current - orig * 0.5)
+
+    def _aggressive_slack(t: int) -> float:
+        """Normal slack plus the remaining sell-borrow allowance."""
+        return absorber.slack_at(t) + _extra_borrow(t)
+
+    def _commit_aggressive(t: int, w: float, target_jid: str):
+        """Commit w MW at hour t using sell borrow then normal commit_at.
+
+        Pre-diverts min(extra_borrow, w) MW from sell to the job (maintaining
+        energy balance), then delegates the remainder to commit_at.
+
+        Returns (residual, used_borrow):
+            residual   – MW not committed (> 0 only if slack was overestimated).
+            used_borrow – True when the extra sell-borrow path was invoked.
+        """
+        rec  = schedule[t - 1]
+        orig = original_sell[t]
+
+        extra_avail = _extra_borrow(t)      # MW still borrowable from sell
+
+        used_borrow = False
+        w_remaining = w
+
+        if extra_avail > EPS:
+            # Pre-commit up to extra_avail from sell before normal commit_at.
+            take_extra = min(extra_avail, w_remaining)
+            sell_now   = rec["sell"]
+            take_extra = min(take_extra, sell_now)  # sell cannot go below 0
+
+            if take_extra > EPS:
+                rec["sell"] = round(sell_now - take_extra, 4)
+                if "day_ahead_commit" in rec:
+                    rec["day_ahead_commit"] = round(
+                        max(0.0, rec["day_ahead_commit"] - take_extra), 4
+                    )
+                used_borrow = True
+
+                # Attribute take_extra to the job from whichever processors
+                # have free capacity (P[i] − Σk[j][i] > 0 at this hour).
+                already: dict[str, float] = {i: 0.0 for i in rec["P"]}
+                for k_ent in rec["k"].values():
+                    for i, v in k_ent.items():
+                        if i in already:
+                            already[i] += v
+
+                to_dist = take_extra
+                for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
+                    free = p_val - already.get(i, 0.0)
+                    give = min(to_dist, free)
+                    if give > EPS:
+                        if target_jid in rec["k"]:
+                            rec["k"][target_jid][i] = round(
+                                rec["k"][target_jid].get(i, 0.0) + give, 4
+                            )
+                        else:
+                            rec["k"][target_jid] = {i: round(give, 4)}
+                        already[i] = already.get(i, 0.0) + give
+                        to_dist   -= give
+                    if to_dist <= EPS:
+                        break
+
+                committed_extra = take_extra - to_dist
+                w_remaining    -= committed_extra
+
+        if w_remaining <= EPS:
+            return 0.0, used_borrow
+
+        residual = absorber.commit_at(t, w_remaining, target_jid)
+        return residual, used_borrow
+
+    def _find_contiguous(r_lo, r_hi, e_len, w_need, slack_fn=None):
+        """First contiguous block of e_len hours in [r_lo, r_hi] with slack ≥ w."""
+        if slack_fn is None:
+            slack_fn = absorber.slack_at
         for start in range(r_lo, r_hi - e_len + 2):
             block = list(range(start, start + e_len))
-            if all(absorber.slack_at(tt) >= w_need - EPS for tt in block):
+            if all(slack_fn(tt) >= w_need - EPS for tt in block):
                 return block
         return []
+
+    # ------------------------------------------------------------------ main loop
 
     for j in sorted_jobs:
         jid     = j["id"]
@@ -619,43 +788,82 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         w       = float(j["w"])
         preempt = int(j.get("preempt", 1))
 
-        slots = []
-        decision = None
+        slots           = []
+        decision        = None
+        via_sell_borrow = False
+
+        # ── Attempt 1: normal slack (sell + spinning reserve + PV) ──────────
 
         if preempt == 0:
-            # Non-preemptive aperiodic: need e contiguous hours (spec C5)
             slots = _find_contiguous(r, min(d, H), e, w)
             if slots:
                 decision = "scheduled_on_time"
             else:
-                # fall back to late placement in [r, H]
                 slots = _find_contiguous(r, H, e, w)
                 if slots:
                     decision = "scheduled_late"
         else:
-            # Preemptive: any e feasible hours suffice
-            on_window = list(range(r, min(d, H) + 1))
+            on_window   = list(range(r, min(d, H) + 1))
             feasible_on = [tt for tt in on_window
                            if absorber.slack_at(tt) >= w - EPS]
             if len(feasible_on) >= e:
-                slots = feasible_on[:e]
+                slots    = feasible_on[:e]
                 decision = "scheduled_on_time"
             else:
-                late_window = list(range(r, H + 1))
+                late_window   = list(range(r, H + 1))
                 feasible_late = [tt for tt in late_window
                                  if absorber.slack_at(tt) >= w - EPS]
                 if len(feasible_late) >= e:
-                    slots = feasible_late[:e]
+                    slots    = feasible_late[:e]
                     decision = "scheduled_late"
 
+        # ── Attempt 2: sell borrow (up to 50 % of original sell per hour) ───
+        # Only triggered when attempt 1 found no on-time placement.
+
+        if not slots:
+            if preempt == 0:
+                slots = _find_contiguous(r, min(d, H), e, w, _aggressive_slack)
+                if slots:
+                    decision        = "scheduled_on_time"
+                    via_sell_borrow = True
+                else:
+                    slots = _find_contiguous(r, H, e, w, _aggressive_slack)
+                    if slots:
+                        decision        = "scheduled_late"
+                        via_sell_borrow = True
+            else:
+                on_window = list(range(r, min(d, H) + 1))
+                feasible  = [tt for tt in on_window
+                             if _aggressive_slack(tt) >= w - EPS]
+                if len(feasible) >= e:
+                    slots           = feasible[:e]
+                    decision        = "scheduled_on_time"
+                    via_sell_borrow = True
+                else:
+                    late_window   = list(range(r, H + 1))
+                    feasible_late = [tt for tt in late_window
+                                     if _aggressive_slack(tt) >= w - EPS]
+                    if len(feasible_late) >= e:
+                        slots           = feasible_late[:e]
+                        decision        = "scheduled_late"
+                        via_sell_borrow = True
+
+        # ── Commit ──────────────────────────────────────────────────────────
+
         if slots:
-            # Commit. If any hour fails (shouldn't if slack_at is right),
-            # fall through to a "missed/skipped" entry.
-            ok = True
+            ok           = True
+            actual_borrow = False
             for tt in slots:
-                if absorber.commit_at(tt, w, jid) > EPS:
+                if via_sell_borrow:
+                    leftover, borrowed = _commit_aggressive(tt, w, jid)
+                    if borrowed:
+                        actual_borrow = True
+                else:
+                    leftover = absorber.commit_at(tt, w, jid)
+                if leftover > EPS:
                     ok = False
                     break
+
             if ok:
                 completion = slots[-1]
                 tardiness  = max(0, completion - d)
@@ -671,12 +879,14 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
                     "completion":           completion,
                     "tardiness":            tardiness,
                     "missed_soft_deadline": missed,
+                    "via_sell_borrow":      actual_borrow,
                 })
                 if missed and 1 <= d <= H:
                     schedule[d - 1]["missed_aperiodic"].append(jid)
                 continue
 
-        # ---- no feasible placement at all
+        # ── No feasible placement ────────────────────────────────────────────
+
         log.append({
             "job_id":               jid,
             "decision":             "skipped",
@@ -688,6 +898,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
             "completion":           None,
             "tardiness":            None,
             "missed_soft_deadline": True,
+            "via_sell_borrow":      False,
             "reason":               f"no slack window of {e}h with >={w}MW in [{r},{H}]",
         })
         if 1 <= d <= H:
@@ -834,8 +1045,11 @@ def print_summary(schedule, obj, periodic_jobs, aperiodic_jobs, sporadic_input):
 
 def main():
     proc, price_data, task_set = load_inputs()
-    pv_forecast = parse_renewable_forecast(proc)
-    price_arr   = parse_price(price_data)
+    pv_forecast              = parse_renewable_forecast(proc)
+    pv_actual                = parse_renewable_actuals(proc)
+    err_std                  = parse_forecast_error_std(proc)
+    price_arr                = parse_price(price_data)
+    cancel_rate, rt_factors  = parse_price_extended(price_data)
 
     periodic_jobs  = expand_periodic(task_set.get("periodic", {}))
     aperiodic_jobs = expand_aperiodic(task_set.get("aperiodic", []))
@@ -850,7 +1064,8 @@ def main():
           f"{len(sporadic_input)} sporadic inbound")
 
     schedule, obj = phase1_static_schedule(
-        proc, pv_forecast, price_arr, periodic_jobs
+        proc, pv_forecast, price_arr, periodic_jobs,
+        cancel_rate=cancel_rate, pv_actual=pv_actual, err_std=err_std
     )
 
     acceptance_log = phase2_acceptance(

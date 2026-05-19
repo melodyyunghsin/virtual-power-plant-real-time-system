@@ -3,6 +3,7 @@ import math
 import os
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+H = 72
 
 
 def load_json(rel_path: str):
@@ -181,7 +182,9 @@ def main():
     }
 
     # ── METRIC: sporadic_value_rate ──────────────────────────────────────────
-    total_sp_exec   = sum(s["e"] for s in sporadic_instances)
+    # Denominator = ALL demo sporadic jobs (accepted + rejected), per spec.
+    # Numerator   = accepted jobs whose completion <= hard deadline.
+    total_sp_exec   = sum(entry.get("e", 0) for entry in acc_log)
     ontime_sp_exec  = sum(
         s["e"] for s in sporadic_instances
         if s["completion"] is not None and s["completion"] <= s["deadline"]
@@ -205,7 +208,26 @@ def main():
                 generator_cost += cfg["cost_fixed"] + cfg["cost_variable"] * power
 
     # ── METRIC: market_revenue ───────────────────────────────────────────────
-    market_revenue = sum(price_map[t] * sell for t, sell in sell_by_hour.items())
+    rt_factors  = {e["hour"]: e.get("realtime_price_factor", 1.0) for e in prices}
+    cancel_rate = prices[0].get("cancellation_penalty_rate", 0.0)
+    is_advanced = any("cancellation_penalty" in slot for slot in schedule)
+
+    market_revenue = 0.0
+    for slot in schedule:
+        t      = slot["t"]
+        sell_t = slot.get("sell", 0.0)
+        p_da   = price_map.get(t, 0.0)
+        if is_advanced:
+            commit_t       = slot.get("day_ahead_commit", sell_t)
+            committed_sold = min(sell_t, commit_t)
+            overage        = max(0.0, sell_t - commit_t)
+            cancel         = max(0.0, commit_t - sell_t)
+            p_rt           = p_da * rt_factors.get(t, 1.0)
+            market_revenue += (p_da * committed_sold
+                               + p_rt * overage
+                               - cancel_rate * p_da * cancel)
+        else:
+            market_revenue += p_da * sell_t
 
     # ── METRIC: objective_value ───────────────────────────────────────────────
     alpha = 10000
@@ -213,6 +235,99 @@ def main():
     f2 = generator_cost
     f3 = -market_revenue
     objective_value = alpha * f1 + f2 + f3
+
+    # ── METRIC: relaxed_assumptions (Level 2 storage metrics) ────────────────
+    bat_cfg = {b["storage_id"]: b for b in proc["storage"]}
+    total_aging_cost = 0.0
+    soc_dep_binding_hours = 0
+    for slot in schedule:
+        t_slot = slot["t"]
+        for bid, bat in bat_cfg.items():
+            dis_val = slot.get("P", {}).get(bid, 0.0)
+            aging = float(bat.get("aging_cost", 0.0))
+            total_aging_cost += aging * dis_val
+            prev_soc = (schedule[t_slot - 2]["soc"].get(bid, bat["soc_init"])
+                        if t_slot > 1 else bat["soc_init"])
+            if prev_soc < 0.3 * bat["soc_max"]:
+                soc_dep_binding_hours += 1
+
+    # ── renewable uncertainty metrics (Assumption I) ──────────────────────────
+    ren_cfg     = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
+    pv_fc_map   = {}   # {pv_id: {hour: pv_forecast}}
+    pv_act_map  = {}   # {pv_id: {hour: pv_actual}}
+    err_std_val = 0.08
+    for entry in proc["renewable_forecast"]:
+        for pv_id, points in entry.items():
+            pv_fc_map[pv_id]  = {int(v["hour"]): float(v["pv_forecast"])   for v in points}
+            pv_act_map[pv_id] = {int(v["hour"]): float(v.get("pv_actual", v["pv_forecast"])) for v in points}
+
+    total_forecast_MWh   = 0.0
+    total_actual_MWh     = 0.0
+    total_abs_error_MWh  = 0.0
+    hours_shortfall      = 0
+    hours_surplus        = 0
+    robust_reduction_MWh = 0.0
+
+    for pv_id, cap_info in ren_cfg.items():
+        cap = float(cap_info["capacity"])
+        for t in range(1, H + 1):
+            fc  = pv_fc_map.get(pv_id, {}).get(t, 0.0)
+            act = pv_act_map.get(pv_id, {}).get(t, fc)
+            total_forecast_MWh  += cap * fc
+            total_actual_MWh    += cap * act
+            total_abs_error_MWh += cap * abs(act - fc)
+            if act < fc - 1e-6:
+                hours_shortfall += 1
+            elif act > fc + 1e-6:
+                hours_surplus   += 1
+            robust_reduction_MWh += cap * fc * err_std_val
+
+    renewable_uncertainty = {
+        "forecast_error_std":        err_std_val,
+        "total_forecast_MWh":        round(total_forecast_MWh, 2),
+        "total_actual_MWh":          round(total_actual_MWh, 2),
+        "total_absolute_error_MWh":  round(total_abs_error_MWh, 2),
+        "hours_with_shortfall":      hours_shortfall,
+        "hours_with_surplus":        hours_surplus,
+        "robust_tightening_total_MWh": round(robust_reduction_MWh, 2),
+    }
+
+    # ── market mechanism metrics (Assumption III) ─────────────────────────────
+    # rt_factors and cancel_rate already parsed above for market_revenue
+    total_commit = sum(slot.get("day_ahead_commit", slot.get("sell", 0.0))
+                       for slot in schedule)
+    total_sell   = sum(slot.get("sell", 0.0) for slot in schedule)
+    # penalty = sum(cancel_rate * price * max(0, commit - sell)) — 0 in static mode
+    total_penalty = sum(
+        cancel_rate * price_map.get(slot["t"], 0.0)
+        * max(0.0, slot.get("day_ahead_commit", 0.0) - slot.get("sell", 0.0))
+        for slot in schedule
+    )
+    rt_vals = list(rt_factors.values())
+    market_mechanism = {
+        "cancellation_penalty_rate": cancel_rate,
+        "total_day_ahead_commit_MWh": round(total_commit, 4),
+        "total_realtime_sell_MWh":    round(total_sell, 4),
+        "total_cancellation_penalty": round(total_penalty, 2),
+        "net_market_revenue":         round(market_revenue - total_penalty, 2),
+        "realtime_price_stats": {
+            "min_factor": round(min(rt_vals), 4),
+            "max_factor": round(max(rt_vals), 4),
+            "avg_factor": round(sum(rt_vals) / len(rt_vals), 4),
+        },
+    }
+
+    relaxed_assumptions = {
+        "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
+        "charge_efficiency": 0.95,
+        "discharge_efficiency": 0.92,
+        "self_discharge_rate": 0.002,
+        "aging_cost_per_MWh": 8.0,
+        "total_aging_cost": round(total_aging_cost, 2),
+        "soc_dep_discharge_binding_hours": soc_dep_binding_hours,
+        "market_mechanism": market_mechanism,
+        "renewable_uncertainty": renewable_uncertainty,
+    }
 
     # ── assemble results dict ─────────────────────────────────────────────────
     results = {
@@ -229,6 +344,7 @@ def main():
         "generator_cost":                round(generator_cost, 2),
         "market_revenue":                round(market_revenue, 2),
         "objective_value":               round(objective_value, 2),
+        "relaxed_assumptions":           relaxed_assumptions,
     }
 
     out_path = os.path.join(BASE, "output", "evaluation_results.json")
