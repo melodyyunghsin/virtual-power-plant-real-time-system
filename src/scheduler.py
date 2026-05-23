@@ -52,7 +52,7 @@ def load_inputs():
     # Demo-time override: sporadic and aperiodic jobs are provided at the
     # demo (per spec §1.1 item 3). They live in this optional file so they
     # don't get tangled with the team-generated periodic task set.
-    demo_path = INPUT_DIR / "sporadic_aperiodic_demo.json"
+    demo_path = INPUT_DIR / "aperiodic_n_sporadic.json"
     if demo_path.exists():
         demo = json.loads(demo_path.read_text(encoding="utf-8"))
         tasks["sporadic"]  = demo.get("sporadic",  [])
