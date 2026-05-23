@@ -197,9 +197,9 @@
       "w": 11.0,
       "slots": [
         12,
-        13
+        18
       ],
-      "completion": 13,
+      "completion": 18,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false

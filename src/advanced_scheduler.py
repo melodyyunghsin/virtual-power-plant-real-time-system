@@ -100,7 +100,14 @@ class AdvancedScheduler:
 
         self.periodic_jobs = expand_periodic(task_set.get("periodic", {}))
         self.aperiodic_jobs = expand_aperiodic(task_set.get("aperiodic", []))
-        self.sporadic_input = task_set.get("sporadic", [])
+        # Normalize sporadic to a list of dicts each carrying its id.
+        # New input format is dict-of-dict ({"s1": {...}}); older was list.
+        sp_raw = task_set.get("sporadic", [])
+        if isinstance(sp_raw, dict):
+            self.sporadic_input = [{"id": sid, **s} for sid, s in sp_raw.items()]
+        else:
+            self.sporadic_input = [{"id": s.get("id", f"s{i}"), **s}
+                                   for i, s in enumerate(sp_raw)]
 
         # Initial plan from static schedule
         static_path = OUTPUT_DIR / "schedule_result.json"
@@ -141,7 +148,7 @@ class AdvancedScheduler:
     def run(self):
         for t in range(1, H + 1):
             arriving_sp = [s for s in self.sporadic_input
-                           if int(s.get("release", -1)) == t]
+                           if int(s.get("r", s.get("release", -1))) == t]
             arriving_ap = [j for j in self.aperiodic_jobs if j["release"] == t]
 
             # newly-arrived aperiodic enter the queue
@@ -199,8 +206,9 @@ class AdvancedScheduler:
     def _process_sporadic(self, sj, t_now):
         """Cheap slack-based acceptance test on the current plan."""
         sid = str(sj["id"])
-        r = int(sj["release"])
-        d = int(sj.get("hard_deadline", sj.get("deadline", H)))
+        # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
+        r = int(sj.get("r", sj.get("release")))
+        d = int(sj.get("d", sj.get("hard_deadline", sj.get("deadline", H))))
         e = int(sj["e"])
         w = float(sj["w"])
         preempt = int(sj.get("preempt", 1))

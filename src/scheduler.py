@@ -165,11 +165,15 @@ def expand_aperiodic(aperiodic_set):
     items = aperiodic_set.items() if isinstance(aperiodic_set, dict) else \
             [(t.get("id", f"a{i}"), t) for i, t in enumerate(aperiodic_set)]
     for tid, t in items:
+        # New format uses {"r","d",…} (consistent with periodic);
+        # older format used {"release","soft_deadline"|"deadline",…}.
+        release  = int(t.get("r",  t.get("release")))
+        deadline = int(t.get("d",  t.get("soft_deadline", t.get("deadline", H))))
         jobs.append({
             "id":       str(tid),
             "task_id":  str(tid),
-            "release":  int(t["release"]),
-            "deadline": int(t.get("soft_deadline", t.get("deadline", H))),
+            "release":  release,
+            "deadline": deadline,
             "e":        int(t["e"]),
             "w":        float(t["w"]),
             "preempt":  int(t.get("preempt", 1)),
@@ -931,8 +935,9 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
 
     for sid, sj in items:
         sid     = str(sid)
-        r       = int(sj["release"])
-        d_abs   = int(sj.get("hard_deadline", sj.get("deadline", H)))
+        # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
+        r       = int(sj.get("r", sj.get("release")))
+        d_abs   = int(sj.get("d", sj.get("hard_deadline", sj.get("deadline", H))))
         e       = int(sj["e"])
         w       = float(sj["w"])
         preempt = int(sj.get("preempt", 1))

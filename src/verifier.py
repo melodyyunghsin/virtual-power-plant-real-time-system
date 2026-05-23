@@ -20,7 +20,7 @@ def run_verifier():
     try:
         proc = load_json(INPUT_DIR / "processor_settings.json")
         tasks = load_json(OUTPUT_DIR / "task_set.json")
-        demo_path = INPUT_DIR / "sporadic_aperiodic_demo.json"
+        demo_path = INPUT_DIR / "aperiodic_n_sporadic.json"
         if demo_path.exists():
             demo = json.loads(open(demo_path).read())
             tasks["sporadic"] = demo.get("sporadic", [])
@@ -40,18 +40,25 @@ def run_verifier():
         for rid, data in entry.items():
             forecast[rid] = {int(d["hour"]): float(d["pv_forecast"]) for d in data}
 
+    # Tag each task with its kind so the deadline check can distinguish
+    # sporadic (hard) from aperiodic (soft) under the new {"r","d",…} format
+    # where both share the same key names.
+    def _ingest(section, kind):
+        section = tasks.get(section, {})
+        if isinstance(section, dict):
+            entries = section.items()
+        else:
+            entries = [(t.get("id", f"{kind[0]}{i}"), t)
+                       for i, t in enumerate(section)]
+        for tid, t in entries:
+            all_tasks[tid] = {**t, "_kind": kind}
+
     all_tasks = {}
-    if "periodic" in tasks: all_tasks.update(tasks["periodic"])
-    if "sporadic" in tasks: 
-        if isinstance(tasks["sporadic"], dict):
-            all_tasks.update(tasks["sporadic"])
-        else:
-            all_tasks.update({t.get("id", f"s{i}"): t for i, t in enumerate(tasks["sporadic"])})
-    if "aperiodic" in tasks: 
-        if isinstance(tasks["aperiodic"], dict):
-            all_tasks.update(tasks["aperiodic"])
-        else:
-            all_tasks.update({t.get("id", f"a{i}"): t for i, t in enumerate(tasks["aperiodic"])})
+    if "periodic" in tasks:
+        for tid, t in tasks["periodic"].items():
+            all_tasks[tid] = {**t, "_kind": "periodic"}
+    _ingest("sporadic",  "sporadic")
+    _ingest("aperiodic", "aperiodic")
     violations = []
     def log_violation(constraint_id, msg):
         violations.append(f"[C{constraint_id}] {msg}")
@@ -229,13 +236,22 @@ def run_verifier():
         if not task_info: continue
 
         # 取得任務的基本參數
-        # Periodic 用 "r" / "d" (相對 deadline)；sporadic/aperiodic 用
-        # "release" / "hard_deadline" / "soft_deadline" (絕對 deadline)
+        # Periodic 用 "r" + "d" (相對 deadline) + "p" (週期)
+        # Sporadic/Aperiodic 新格式用 "r" + "d" (絕對 deadline)，無 "p"
+        # Sporadic/Aperiodic 舊格式則用 "release" + "hard_deadline"/"soft_deadline"
         r_time = task_info.get("r", task_info.get("release", 0))
         period = task_info.get("p")     # 週期 (僅 periodic 有)
         e_time = task_info.get("e")     # 預期執行時間
-        d_rel  = task_info.get("d")     # 相對 deadline (僅 periodic 有)
-        d_abs  = task_info.get("hard_deadline") or task_info.get("soft_deadline")
+        if period is not None:
+            d_rel = task_info.get("d")  # 相對 deadline (periodic)
+            d_abs = None
+        else:
+            d_rel = None
+            # 對 sporadic/aperiodic，"d" 是絕對 deadline (新格式)；
+            # 否則回退到舊格式的 hard_deadline / soft_deadline
+            d_abs = (task_info.get("d")
+                     or task_info.get("hard_deadline")
+                     or task_info.get("soft_deadline"))
         is_non_preemptive = (task_info.get("preempt") == 0)
 
         # 1. 將時間點依照「週期」分群 (針對週期性任務)
@@ -280,7 +296,7 @@ def run_verifier():
             elif (not period) and d_abs is not None:
                 if end_time > d_abs:
                     # Aperiodic 是 soft deadline → 不算違規，只是 tardiness > 0
-                    if task_info.get("soft_deadline") is not None:
+                    if task_info.get("_kind") == "aperiodic" or task_info.get("soft_deadline") is not None:
                         pass  # 軟截止，由 evaluator 計算 tardiness
                     else:
                         log_violation(5, f"Job {job_name} 違反 Hard Deadline: 執行至 t={end_time}，超出絕對期限 {d_abs}")

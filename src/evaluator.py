@@ -29,7 +29,7 @@ def main():
 
     # Demo-time dynamic jobs (sporadic + aperiodic). Same file as scheduler reads.
     # Falls back to task_set for backward compatibility when the file is absent.
-    dynamic_path = os.path.join(BASE, "input", "sporadic_aperiodic_demo.json")
+    dynamic_path = os.path.join(BASE, "input", "aperiodic_n_sporadic.json")
     if os.path.exists(dynamic_path):
         with open(dynamic_path, encoding="utf-8") as f:
             dynamic = json.load(f)
