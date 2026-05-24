@@ -72,18 +72,18 @@
   "aperiodic_log": [
     {
       "job_id": "a1",
-      "decision": "scheduled_on_time",
+      "decision": "scheduled_late",
       "release": 2,
       "soft_deadline": 21,
       "e": 2,
       "w": 8.0,
       "slots": [
-        2,
-        3
+        23,
+        56
       ],
-      "completion": 3,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
+      "completion": 56,
+      "tardiness": 35,
+      "missed_soft_deadline": true,
       "via_sell_borrow": false
     },
     {
@@ -101,7 +101,7 @@
       "completion": 21,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a4",
@@ -116,7 +116,7 @@
       "completion": 26,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a3",
@@ -134,22 +134,22 @@
       "completion": 24,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a5",
-      "decision": "scheduled_on_time",
+      "decision": "scheduled_late",
       "release": 34,
       "soft_deadline": 48,
       "e": 2,
       "w": 7.0,
       "slots": [
-        44,
-        45
+        70,
+        71
       ],
-      "completion": 45,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
+      "completion": 71,
+      "tardiness": 23,
+      "missed_soft_deadline": true,
       "via_sell_borrow": false
     },
     {
@@ -167,7 +167,7 @@
       "completion": 46,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a7",
@@ -185,7 +185,7 @@
       "completion": 53,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a8",
@@ -201,7 +201,7 @@
       "completion": 59,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false
+      "via_sell_borrow": true
     },
     {
       "job_id": "a9",
@@ -211,9 +211,9 @@
       "e": 1,
       "w": 5.0,
       "slots": [
-        66
+        69
       ],
-      "completion": 66,
+      "completion": 69,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false

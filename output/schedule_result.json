@@ -32,13 +32,10 @@
       "k": {
         "p7": {
           "thermal_1": 10.0
-        },
-        "a1": {
-          "thermal_1": 8.0
         }
       },
-      "sell": 12.0,
-      "day_ahead_commit": 12.0,
+      "sell": 20.0,
+      "day_ahead_commit": 20.0,
       "soc": {
         "battery_1": 42.2841,
         "battery_2": 24.9001
@@ -62,13 +59,10 @@
       "k": {
         "p7": {
           "thermal_1": 10.0
-        },
-        "a1": {
-          "thermal_1": 8.0
         }
       },
-      "sell": 27.0,
-      "day_ahead_commit": 27.0,
+      "sell": 35.0,
+      "day_ahead_commit": 35.0,
       "soc": {
         "battery_1": 42.1995,
         "battery_2": 24.8503
@@ -708,7 +702,9 @@
         "pv_1": 0.0,
         "pv_2": 0.0
       },
-      "missed_aperiodic": [],
+      "missed_aperiodic": [
+        "a1"
+      ],
       "rejected_sporadic": []
     },
     {
@@ -750,8 +746,8 @@
     {
       "t": 23,
       "P": {
-        "thermal_1": 75.0,
-        "thermal_2": 40.0,
+        "thermal_1": 80.0,
+        "thermal_2": 43.0,
         "battery_1": 20.0,
         "battery_2": 15.0
       },
@@ -764,6 +760,10 @@
         },
         "s2": {
           "thermal_1": 16.0
+        },
+        "a1": {
+          "thermal_1": 5.0,
+          "thermal_2": 3.0
         },
         "a3": {
           "thermal_1": 10.0
@@ -1489,15 +1489,12 @@
         "battery_2_chg": {
           "thermal_1": 5.7744
         },
-        "a5": {
-          "thermal_1": 7.0
-        },
         "a6": {
           "thermal_1": 13.0
         }
       },
-      "sell": 22.4542,
-      "day_ahead_commit": 22.4542,
+      "sell": 29.4542,
+      "day_ahead_commit": 29.4542,
       "soc": {
         "battery_1": 100.0,
         "battery_2": 60.0
@@ -1525,15 +1522,12 @@
         "p9": {
           "thermal_1": 7.0
         },
-        "a5": {
-          "thermal_1": 7.0
-        },
         "a6": {
           "thermal_1": 13.0
         }
       },
-      "sell": 38.0,
-      "day_ahead_commit": 38.0,
+      "sell": 45.0,
+      "day_ahead_commit": 45.0,
       "soc": {
         "battery_1": 99.8,
         "battery_2": 59.88
@@ -1645,7 +1639,9 @@
         "pv_1": 0.0,
         "pv_2": 0.0
       },
-      "missed_aperiodic": [],
+      "missed_aperiodic": [
+        "a5"
+      ],
       "rejected_sporadic": []
     },
     {
@@ -1858,14 +1854,19 @@
     {
       "t": 56,
       "P": {
-        "thermal_1": 75.0,
-        "thermal_2": 40.0,
+        "thermal_1": 80.0,
+        "thermal_2": 43.0,
         "pv_1": 19.32,
         "pv_2": 25.76,
         "battery_1": 20.0,
         "battery_2": 15.0
       },
-      "k": {},
+      "k": {
+        "a1": {
+          "thermal_1": 5.0,
+          "thermal_2": 3.0
+        }
+      },
       "sell": 195.08,
       "day_ahead_commit": 195.08,
       "soc": {
@@ -2268,13 +2269,10 @@
         },
         "battery_2_chg": {
           "thermal_1": 0.1263
-        },
-        "a9": {
-          "pv_2": 5.0
         }
       },
-      "sell": 10.1192,
-      "day_ahead_commit": 10.1192,
+      "sell": 15.1192,
+      "day_ahead_commit": 15.1192,
       "soc": {
         "battery_1": 100.0,
         "battery_2": 60.0
@@ -2357,11 +2355,15 @@
       "t": 69,
       "P": {
         "thermal_1": 75.0,
-        "thermal_2": 40.0,
+        "thermal_2": 45.0,
         "battery_1": 20.0,
         "battery_2": 15.0
       },
-      "k": {},
+      "k": {
+        "a9": {
+          "thermal_2": 5.0
+        }
+      },
       "sell": 150.0,
       "day_ahead_commit": 150.0,
       "soc": {
@@ -2382,14 +2384,18 @@
     {
       "t": 70,
       "P": {
-        "thermal_1": 75.0,
-        "thermal_2": 40.0,
+        "thermal_1": 80.0,
+        "thermal_2": 42.0,
         "battery_1": 20.0,
         "battery_2": 15.0
       },
       "k": {
         "p5": {
           "battery_2": 9.0
+        },
+        "a5": {
+          "thermal_1": 5.0,
+          "thermal_2": 2.0
         }
       },
       "sell": 141.0,
@@ -2412,8 +2418,8 @@
     {
       "t": 71,
       "P": {
-        "thermal_1": 75.0,
-        "thermal_2": 40.0,
+        "thermal_1": 80.0,
+        "thermal_2": 42.0,
         "battery_1": 20.0,
         "battery_2": 15.0
       },
@@ -2426,6 +2432,10 @@
         },
         "p6": {
           "thermal_2": 18.0
+        },
+        "a5": {
+          "thermal_1": 5.0,
+          "thermal_2": 2.0
         }
       },
       "sell": 117.0,

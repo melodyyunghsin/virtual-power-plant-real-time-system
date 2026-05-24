@@ -538,9 +538,10 @@ class SlackAbsorber:
     generators, then ramp up PVs.
     """
 
-    def __init__(self, schedule, proc, pv_forecast):
+    def __init__(self, schedule, proc, pv_forecast, err_std=0.0):
         self.schedule    = schedule
         self.pv_forecast = pv_forecast
+        self.robust      = 1.0 - float(err_std)   # robust PV bound coefficient
         self.gens        = {g["generator_id"]: g for g in proc["generator"]}
         self.pvs         = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
         self.gen_ids     = list(self.gens)
@@ -565,7 +566,7 @@ class SlackAbsorber:
             )
             s += max(0.0, max_new - p_curr) # 發電機的剩餘可用產能
         for pv in self.pv_ids:
-            cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
+            cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t] * self.robust
             curr = rec["P"].get(pv, 0.0)
             s += max(0.0, cap_avail - curr) # 沒用到的 Renewable (err_std)
         return s
@@ -633,7 +634,7 @@ class SlackAbsorber:
             for pv in self.pv_ids:
                 if remaining <= EPS:
                     break
-                cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
+                cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t] * self.robust
                 curr = rec["P"].get(pv, 0.0)
                 avail = cap_avail - curr
                 if avail <= EPS:
@@ -659,7 +660,7 @@ class SlackAbsorber:
 # Phase 3 — Aperiodic queue
 # =============================================================================
 
-def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
+def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
     """Soft-deadline scheduling for aperiodic jobs (EDF order).
 
     Two-attempt strategy per job:
@@ -681,7 +682,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
     if not aperiodic_jobs:
         return log
 
-    absorber = SlackAbsorber(schedule, proc, pv_forecast)
+    absorber = SlackAbsorber(schedule, proc, pv_forecast, err_std=err_std)
 
     # Snapshot of sell values produced by Phase 1+2 (before any Phase 3 commits).
     # Used as the reference for the 50%-of-original sell-borrow cap.
@@ -706,11 +707,32 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         orig    = original_sell[t]
         return max(0.0, current - orig * 0.5)
 
-    def _aggressive_slack(t):
-        """Replace the unrestricted sell portion with the capped portion."""
-        other = absorber.slack_at(t) - schedule[t - 1]["sell"]
-        return other + _extra_borrow(t)
+    def _normal_slack(t: int) -> float:
+        """Attempt-1 slack: spinning reserve + PV underuse only.
 
+        Sell is intentionally excluded — Phase 3 only touches sell via the
+        capped Attempt-2 borrow path. (Phase 2 sporadic acceptance still uses
+        `absorber.slack_at`, which retains the full sell contribution, since
+        sporadic jobs have hard deadlines and higher priority for sell.)
+        """
+        return absorber.slack_at(t) - schedule[t - 1]["sell"]
+
+    def _aggressive_slack(t):
+        """Attempt-2 slack: spinning reserve + PV + remaining sell-borrow cap."""
+        return _normal_slack(t) + _extra_borrow(t)
+
+    def _commit_normal(t: int, w: float, target_jid: str) -> float:
+        """Attempt-1 commit: route w MW through generator ramp / PV only.
+
+        Hides sell from `commit_at` so Step 1 (peel-from-sell) short-circuits
+        and the demand is sourced from gen/PV ramp instead.
+        """
+        rec = schedule[t - 1]
+        saved_sell = rec["sell"]
+        rec["sell"] = 0.0
+        residual = absorber.commit_at(t, w, target_jid)
+        rec["sell"] = saved_sell
+        return residual
 
     def _commit_aggressive(t: int, w: float, target_jid: str):
         """Commit w MW at hour t using sell borrow then normal commit_at.
@@ -807,27 +829,27 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         decision        = None
         via_sell_borrow = False
 
-        # ── Attempt 1: normal slack (sell + spinning reserve + PV) ──────────
+        # ── Attempt 1: spinning reserve + PV only (sell reserved for Attempt 2)
 
         if preempt == 0:
-            slots = _find_contiguous(r, min(d, H), e, w)
+            slots = _find_contiguous(r, min(d, H), e, w, _normal_slack)
             if slots:
                 decision = "scheduled_on_time"
             else:
-                slots = _find_contiguous(r, H, e, w)
+                slots = _find_contiguous(r, H, e, w, _normal_slack)
                 if slots:
                     decision = "scheduled_late"
         else:
             on_window   = list(range(r, min(d, H) + 1))
             feasible_on = [tt for tt in on_window
-                           if absorber.slack_at(tt) >= w - EPS]
+                           if _normal_slack(tt) >= w - EPS]
             if len(feasible_on) >= e:
                 slots    = feasible_on[:e]
                 decision = "scheduled_on_time"
             else:
                 late_window   = list(range(r, H + 1))
                 feasible_late = [tt for tt in late_window
-                                 if absorber.slack_at(tt) >= w - EPS]
+                                 if _normal_slack(tt) >= w - EPS]
                 if len(feasible_late) >= e:
                     slots    = feasible_late[:e]
                     decision = "scheduled_late"
@@ -874,7 +896,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
                     if borrowed:
                         actual_borrow = True
                 else:
-                    leftover = absorber.commit_at(tt, w, jid)
+                    leftover = _commit_normal(tt, w, jid)
                 if leftover > EPS:
                     ok = False
                     break
@@ -926,7 +948,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
 # Phase 2 — Sporadic acceptance test
 # =============================================================================
 
-def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
+def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast, err_std=0.0):
     """Online acceptance test for sporadic jobs (hard deadline).
 
     For each arriving sporadic, compute total slack at each candidate hour;
@@ -939,7 +961,7 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
     if not sporadic_input:
         return log
 
-    absorber = SlackAbsorber(schedule, proc, pv_forecast) 
+    absorber = SlackAbsorber(schedule, proc, pv_forecast, err_std=err_std)
 
     items = (sporadic_input.items() if isinstance(sporadic_input, dict)
              else [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)])
@@ -1087,11 +1109,11 @@ def main():
     )
 
     acceptance_log = phase2_acceptance(
-        schedule, sporadic_input, proc, pv_forecast
+        schedule, sporadic_input, proc, pv_forecast, err_std=err_std
     )
 
     aperiodic_log = phase3_aperiodic(
-        schedule, aperiodic_jobs, proc, pv_forecast
+        schedule, aperiodic_jobs, proc, pv_forecast, err_std=err_std
     )
 
     write_outputs(schedule, acceptance_log, aperiodic_log)
