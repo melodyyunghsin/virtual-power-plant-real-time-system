@@ -168,7 +168,10 @@ def expand_aperiodic(aperiodic_set):
         # New format uses {"r","d",…} (consistent with periodic);
         # older format used {"release","soft_deadline"|"deadline",…}.
         release  = int(t.get("r",  t.get("release")))
-        deadline = int(t.get("d",  t.get("soft_deadline", t.get("deadline", H))))
+        if "d" in t:
+            deadline = min(release + int(t["d"]) - 1, H)
+        else:
+            deadline = int(t.get("soft_deadline", t.get("deadline", H)))
         jobs.append({
             "id":       str(tid),
             "task_id":  str(tid),
@@ -937,7 +940,10 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
         sid     = str(sid)
         # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
         r       = int(sj.get("r", sj.get("release")))
-        d_abs   = int(sj.get("d", sj.get("hard_deadline", sj.get("deadline", H))))
+        if "d" in sj:
+            d_abs = min(r + int(sj["d"]) - 1, H)
+        else:
+            d_abs = int(sj.get("hard_deadline", sj.get("deadline", H)))
         e       = int(sj["e"])
         w       = float(sj["w"])
         preempt = int(sj.get("preempt", 1))

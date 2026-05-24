@@ -208,7 +208,10 @@ class AdvancedScheduler:
         sid = str(sj["id"])
         # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
         r = int(sj.get("r", sj.get("release")))
-        d = int(sj.get("d", sj.get("hard_deadline", sj.get("deadline", H))))
+        if "d" in sj:
+            d = min(r + int(sj["d"]) - 1, H)
+        else:
+            d = int(sj.get("hard_deadline", sj.get("deadline", H)))
         e = int(sj["e"])
         w = float(sj["w"])
         preempt = int(sj.get("preempt", 1))
