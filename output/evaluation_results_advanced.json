@@ -1,17 +1,17 @@
 {
   "hard_deadline_miss_rate": 0.0,
   "soft_deadline_miss_rate": 0.0,
-  "generator_cost": 295300.0,
-  "market_revenue": 351924.6,
-  "cancellation_penalty": 412.13,
-  "net_market_revenue": 351512.47,
-  "objective_value": -56624.6,
+  "generator_cost": 298700.0,
+  "market_revenue": 352018.62,
+  "cancellation_penalty": 1030.03,
+  "net_market_revenue": 350988.59,
+  "objective_value": -53318.62,
   "acceptance_test": {
     "total": 5,
     "accepted": 4,
     "rejected": 1
   },
-  "sporadic_value_rate": 1.0,
+  "sporadic_value_rate": 0.9,
   "advanced_scheduler": {
     "method": "Event-Triggered Rolling Horizon",
     "window_size": 12,
@@ -25,21 +25,21 @@
       "periodic_6h": 12,
       "aperiodic_arrival": 9
     },
-    "total_cancellation_penalty": 412.13,
+    "total_cancellation_penalty": 1030.03,
     "vs_static": {
       "objective_value_static": -52210.45,
-      "objective_value_dynamic": -56624.6,
+      "objective_value_dynamic": -53318.62,
       "generator_cost_static": 285100.0,
-      "generator_cost_dynamic": 295300.0,
-      "generator_cost_change": 10200.0,
+      "generator_cost_dynamic": 298700.0,
+      "generator_cost_change": 13600.0,
       "market_revenue_static": 337310.45,
-      "market_revenue_dynamic": 351924.6,
-      "market_revenue_change": 14614.15,
-      "cancellation_penalty_total": 412.13,
+      "market_revenue_dynamic": 352018.62,
+      "market_revenue_change": 14708.17,
+      "cancellation_penalty_total": 1030.03,
       "soft_miss_rate_static": 0.0,
       "soft_miss_rate_dynamic": 0.0,
       "sporadic_value_rate_static": 0.9,
-      "sporadic_value_rate_dynamic": 1.0
+      "sporadic_value_rate_dynamic": 0.9
     }
   }
 }

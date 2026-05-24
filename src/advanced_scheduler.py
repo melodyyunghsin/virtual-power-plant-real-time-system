@@ -915,7 +915,7 @@ class AdvancedScheduler:
             hrs = sorted(task_hours.get(rec["job_id"], []))
             comp = max(hrs) if hrs else None
             sporadic_completed.append({**rec, "completion": comp})
-        sp_total_e = sum(r["e"] for r in accepted)
+        sp_total_e = sum(r["e"] for r in self.acceptance_log)
         sp_ontime_e = sum(r["e"] for r in sporadic_completed
                           if r["completion"] is not None
                           and r["completion"] <= r["deadline"])
