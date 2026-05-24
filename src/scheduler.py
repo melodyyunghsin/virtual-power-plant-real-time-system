@@ -660,7 +660,8 @@ class SlackAbsorber:
 # Phase 3 — Aperiodic queue
 # =============================================================================
 
-def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
+def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast,
+                     err_std=0.0, price_arr=None):
     """Soft-deadline scheduling for aperiodic jobs (EDF order).
 
     Two-attempt strategy per job:
@@ -721,6 +722,32 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
         """Attempt-2 slack: spinning reserve + PV + remaining sell-borrow cap."""
         return _normal_slack(t) + _extra_borrow(t)
 
+    def _full_borrow(t: int) -> float:
+        """Attempt-3 borrow allowance: all remaining current sell at hour t."""
+        return schedule[t - 1]["sell"]
+
+    def _full_slack(t: int) -> float:
+        """Attempt-3 slack: spinning reserve + PV + ALL remaining sell."""
+        return _normal_slack(t) + _full_borrow(t)
+
+    def _estimate_revenue_loss(slots, w_need) -> float:
+        """Estimated $ lost in market revenue if we cover (slots × w_need)
+        by borrowing from sell whatever `_normal_slack` cannot supply.
+
+        For each slot, sell_take = max(0, w_need − normal_slack), so the
+        loss = Σ sell_take · price[t]. Reads current schedule state, so
+        prior Phase-3 commits at the same slots are already reflected.
+        """
+        if price_arr is None:
+            return 0.0
+        loss = 0.0
+        for tt in slots:
+            need_from_sell = max(0.0, w_need - _normal_slack(tt))
+            avail_sell     = schedule[tt - 1]["sell"]
+            sell_take      = min(need_from_sell, avail_sell)
+            loss += sell_take * float(price_arr[tt])
+        return loss
+
     def _commit_normal(t: int, w: float, target_jid: str) -> float:
         """Attempt-1 commit: route w MW through generator ramp / PV only.
 
@@ -734,20 +761,28 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
         rec["sell"] = saved_sell
         return residual
 
-    def _commit_aggressive(t: int, w: float, target_jid: str):
+    def _commit_aggressive(t: int, w: float, target_jid: str,
+                           borrow_fn=None):
         """Commit w MW at hour t using sell borrow then normal commit_at.
 
-        Pre-diverts min(extra_borrow, w) MW from sell to the job (maintaining
-        energy balance), then delegates the remainder to commit_at.
+        `borrow_fn(t)` returns the maximum MWh we may divert from sell at
+        hour t. Defaults to `_extra_borrow` (Attempt 2, 50 % cap); pass
+        `_full_borrow` for Attempt 3 (100 % of current sell).
+
+        Pre-diverts min(borrow_fn(t), w) MW from sell to the job, then
+        delegates the remainder to commit_at with sell hidden so it cannot
+        peel beyond the per-attempt allowance.
 
         Returns (residual, used_borrow):
             residual   – MW not committed (> 0 only if slack was overestimated).
-            used_borrow – True when the extra sell-borrow path was invoked.
+            used_borrow – True when the sell-borrow path was actually invoked.
         """
+        if borrow_fn is None:
+            borrow_fn = _extra_borrow
         rec  = schedule[t - 1]
         orig = original_sell[t]
 
-        extra_avail = _extra_borrow(t)      # MW still borrowable from sell
+        extra_avail = borrow_fn(t)          # MW still borrowable from sell
 
         used_borrow = False
         w_remaining = w
@@ -828,6 +863,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
         slots           = []
         decision        = None
         via_sell_borrow = False
+        borrow_fn       = _extra_borrow   # which cap the commit path enforces
 
         # ── Attempt 1: spinning reserve + PV only (sell reserved for Attempt 2)
 
@@ -885,6 +921,43 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
                         decision        = "scheduled_late"
                         via_sell_borrow = True
 
+        # ── Attempt 3: borrow up to 100 % of sell, gated by economics ───────
+        # Only triggered when Attempts 1 & 2 found nothing. We allow the full
+        # remaining sell at each slot, but only commit if the estimated
+        # revenue loss is less than the miss penalty (ALPHA).
+
+        if not slots:
+            candidate = []
+            cand_decision = None
+            if preempt == 0:
+                candidate = _find_contiguous(r, min(d, H), e, w, _full_slack)
+                if candidate:
+                    cand_decision = "scheduled_on_time"
+                else:
+                    candidate = _find_contiguous(r, H, e, w, _full_slack)
+                    if candidate:
+                        cand_decision = "scheduled_late"
+            else:
+                on_window = list(range(r, min(d, H) + 1))
+                feasible  = [tt for tt in on_window
+                             if _full_slack(tt) >= w - EPS]
+                if len(feasible) >= e:
+                    candidate, cand_decision = feasible[:e], "scheduled_on_time"
+                else:
+                    late_window = list(range(r, H + 1))
+                    feasible_late = [tt for tt in late_window
+                                     if _full_slack(tt) >= w - EPS]
+                    if len(feasible_late) >= e:
+                        candidate, cand_decision = feasible_late[:e], "scheduled_late"
+
+            if candidate:
+                est_loss = _estimate_revenue_loss(candidate, w)
+                if est_loss < ALPHA:
+                    slots           = candidate
+                    decision        = cand_decision
+                    via_sell_borrow = True
+                    borrow_fn       = _full_borrow
+
         # ── Commit ──────────────────────────────────────────────────────────
 
         if slots:
@@ -892,7 +965,8 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast, err_std=0.0):
             actual_borrow = False
             for tt in slots:
                 if via_sell_borrow:
-                    leftover, borrowed = _commit_aggressive(tt, w, jid)
+                    leftover, borrowed = _commit_aggressive(tt, w, jid,
+                                                            borrow_fn=borrow_fn)
                     if borrowed:
                         actual_borrow = True
                 else:
@@ -1113,7 +1187,8 @@ def main():
     )
 
     aperiodic_log = phase3_aperiodic(
-        schedule, aperiodic_jobs, proc, pv_forecast, err_std=err_std
+        schedule, aperiodic_jobs, proc, pv_forecast,
+        err_std=err_std, price_arr=price_arr,
     )
 
     write_outputs(schedule, acceptance_log, aperiodic_log)
