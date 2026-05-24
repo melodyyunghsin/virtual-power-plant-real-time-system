@@ -236,22 +236,25 @@ def run_verifier():
         if not task_info: continue
 
         # 取得任務的基本參數
-        # Periodic 用 "r" + "d" (相對 deadline) + "p" (週期)
-        # Sporadic/Aperiodic 新格式用 "r" + "d" (絕對 deadline)，無 "p"
-        # Sporadic/Aperiodic 舊格式則用 "release" + "hard_deadline"/"soft_deadline"
+        # Periodic           : "r" + "d" (相對 deadline) + "p" (週期)
+        # Sporadic/Aperiodic : 新格式 "r" + "d" (相對 deadline，無 "p")
+        #                      舊格式 "release" + "hard_deadline"/"soft_deadline" (絕對)
         r_time = task_info.get("r", task_info.get("release", 0))
         period = task_info.get("p")     # 週期 (僅 periodic 有)
         e_time = task_info.get("e")     # 預期執行時間
         if period is not None:
-            d_rel = task_info.get("d")  # 相對 deadline (periodic)
+            # Periodic: 用相對 d，按每個 instance 自行算 absolute deadline
+            d_rel = task_info.get("d")
             d_abs = None
         else:
+            # Sporadic/Aperiodic: 新格式 d 為相對 → 絕對 = r + d - 1 (clamp 至 H)
+            # 舊格式則直接讀 hard_deadline / soft_deadline (已是絕對)
             d_rel = None
-            # 對 sporadic/aperiodic，"d" 是絕對 deadline (新格式)；
-            # 否則回退到舊格式的 hard_deadline / soft_deadline
-            d_abs = (task_info.get("d")
-                     or task_info.get("hard_deadline")
-                     or task_info.get("soft_deadline"))
+            if "d" in task_info:
+                d_abs = min(int(r_time) + int(task_info["d"]) - 1, H)
+            else:
+                d_abs = (task_info.get("hard_deadline")
+                         or task_info.get("soft_deadline"))
         is_non_preemptive = (task_info.get("preempt") == 0)
 
         # 1. 將時間點依照「週期」分群 (針對週期性任務)
