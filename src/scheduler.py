@@ -222,7 +222,7 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
     dis   = pulp.LpVariable.dicts("dis",   (bat_ids, T), lowBound=0) # 電池放電率
     soc   = pulp.LpVariable.dicts("soc",   (bat_ids, T), lowBound=0) # 電池電量
     v_chg   = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary") # 1: 充電模式/ 0: 放電模式或閒置
-    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1) # 電池電量之佔比
+    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1) # soc_init / (0.3 * soc_max)
 
     sell        = pulp.LpVariable.dicts("sell",       T, lowBound=0) # 賣給市場的總功率
     sell_share  = pulp.LpVariable.dicts("sellshare",  (proc_ids, T), lowBound=0) # 各個設備賣給市場的功率
@@ -300,19 +300,19 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
         else:
             prob += total_x == e, f"jobE_{jid}" # C3
 
-        # non-preemptive: pick exactly one start, x = sum of covering starts
+        # non-preemptive: pick exactly one start, x = sum of covering starts (C5)
         if j["preempt"] == 0:
             sum_y = pulp.lpSum(y[jid].values())
             if j["kind"] == "aperiodic":
-                prob += sum_y == 1 - miss[jid], f"oneStart_{jid}" # C5
+                prob += sum_y == 1 - miss[jid], f"oneStart_{jid}" 
             else:
                 prob += sum_y == 1, f"oneStart_{jid}"
-            for t in x[jid]:
+            for t in x[jid]: # s: 啟動時間, t: 當下時間, e: 執行時間
                 covering = [s for s in y[jid] if s <= t <= s + e - 1]
                 prob += x[jid][t] == pulp.lpSum(y[jid][s] for s in covering), \
                         f"link_{jid}_{t}"
 
-        # demand: sum_i K[j,i,t] = w * x[j,t]
+        # demand: sum_i K[j,i,t] = w * x[j,t] (C1)
         for t in x[jid]:
             prob += pulp.lpSum(K[jid][i][t] for i in proc_ids) == \
                     j["w"] * x[jid][t], f"dem_{jid}_{t}"
@@ -351,15 +351,15 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
 
             # ramp limits apply unconditionally, including shutdown:
             # when u[t]=0 → P[t]=0, so rd constraint forces P[t-1] <= rd.
-            prob += P[g][t] - P_prev <= ru, f"ru_{g}_{t}"
-            prob += P_prev - P[g][t] <= rd, f"rd_{g}_{t}"
+            prob += P[g][t] - P_prev <= ru, f"ru_{g}_{t}" # C7
+            prob += P_prev - P[g][t] <= rd, f"rd_{g}_{t}" # C7
 
         # min up / down time
         for t in T:
             for s in range(t, min(t + UT - 1, H) + 1):
-                prob += u[g][s] >= z_on[g][t], f"ut_{g}_{t}_{s}"
+                prob += u[g][s] >= z_on[g][t], f"ut_{g}_{t}_{s}" # C9
             for s in range(t, min(t + DT - 1, H) + 1):
-                prob += 1 - u[g][s] >= z_off[g][t], f"dt_{g}_{t}_{s}"
+                prob += 1 - u[g][s] >= z_off[g][t], f"dt_{g}_{t}_{s}" # C10
 
         # C11: if generator was on at t=0 with TN < UT, force on for the
         # remaining UT - TN hours so the initial up-period completes.
@@ -396,17 +396,17 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
         sfrac_init = min(1.0, soc_init / (0.3 * soc_max))
 
         for t in T:
-            prob += chg[b][t] <= chg_max * v_chg[b][t],       f"cmx_{b}_{t}"
-            prob += dis[b][t] <= dis_max * (1 - v_chg[b][t]), f"dmx_{b}_{t}"
-            prob += soc[b][t] >= soc_min, f"smin_{b}_{t}"
-            prob += soc[b][t] <= soc_max, f"smax_{b}_{t}"
+            prob += chg[b][t] <= chg_max * v_chg[b][t],       f"cmx_{b}_{t}" # C15
+            prob += dis[b][t] <= dis_max * (1 - v_chg[b][t]), f"dmx_{b}_{t}" # C14
+            prob += soc[b][t] >= soc_min, f"smin_{b}_{t}" # C17
+            prob += soc[b][t] <= soc_max, f"smax_{b}_{t}" # C17
             # C16 L2: SOC dynamics with round-trip efficiency and self-discharge
             prev = soc[b][t - 1] if t > 1 else soc_init
             prob += (soc[b][t] ==
-                     prev * (1 - sigma)
+                     prev * (1 - sigma) # self-discharge
                      + chg[b][t] * eta_c
                      - dis[b][t] / eta_d), f"sdyn_{b}_{t}"
-            # soc_frac ∈ [0,1]: upper-bounded by SOC/(0.3*soc_max)
+            # soc_frac ∈ [0,1]: upper-bounded by SOC/(0.3*soc_max) 電池電量低於 30% 時，放電受限
             prob += soc_frac[b][t] * (0.3 * soc_max) <= soc[b][t], f"sfrac_ub_{b}_{t}"
             # SOC-dependent discharge limit uses previous-hour soc_frac
             prev_sfrac = soc_frac[b][t - 1] if t > 1 else sfrac_init
@@ -426,7 +426,7 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
                 for cj in chg_jobs if i in Kchg[cj["id"]]
             )
             prob += P[i][t] == to_jobs + to_chg + sell_share[i][t], \
-                    f"bal_{i}_{t}"
+                    f"bal_{i}_{t}" # C23
 
     for t in T:
         prob += sell[t] == pulp.lpSum(sell_share[i][t] for i in proc_ids), \
@@ -548,26 +548,26 @@ class SlackAbsorber:
 
     def slack_at(self, t):
         rec = self.schedule[t - 1]
-        s = rec["sell"]
+        s = rec["sell"] # 賣出的
         for g in self.gen_ids:
             gd = self.gens[g]
             p_curr = rec["P"].get(g, 0.0)
-            if p_curr <= EPS:
+            if p_curr <= EPS: # 關機，跳過
                 continue
             p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
-                      else float(gd.get("initial_energy", 0)))
+                      else float(gd.get("initial_energy", 0))) # 前一小時的輸出
             p_next = (self.schedule[t]["P"].get(g, 0.0)
-                      if t < len(self.schedule) else p_curr)
+                      if t < len(self.schedule) else p_curr) # 當前的輸出
             max_new = min(
                 float(gd["output_max"]),
                 p_prev + gd["ramp_up_rate"],
                 p_next + gd["ramp_down_rate"],
             )
-            s += max(0.0, max_new - p_curr)
+            s += max(0.0, max_new - p_curr) # 發電機的剩餘可用產能
         for pv in self.pv_ids:
             cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
             curr = rec["P"].get(pv, 0.0)
-            s += max(0.0, cap_avail - curr)
+            s += max(0.0, cap_avail - curr) # 沒用到的 Renewable (err_std)
         return s
 
     def commit_at(self, t, w, target_jid):
@@ -690,7 +690,7 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
     }
 
     sorted_jobs = sorted(aperiodic_jobs,
-                         key=lambda j: (j["deadline"], j["release"]))
+                         key=lambda j: (j["deadline"], j["release"])) # Deadline-first, then release-first
 
     # ------------------------------------------------------------------ helpers
 
@@ -706,11 +706,9 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         orig    = original_sell[t]
         return max(0.0, current - orig * 0.5)
 
-    def _aggressive_slack(t):
-        """Replace the unrestricted sell portion with the capped portion."""
-        other = absorber.slack_at(t) - schedule[t - 1]["sell"]
-        return other + _extra_borrow(t)
-
+    def _aggressive_slack(t: int) -> float: 
+        """Normal slack plus the remaining sell-borrow allowance."""
+        return absorber.slack_at(t) + _extra_borrow(t)
 
     def _commit_aggressive(t: int, w: float, target_jid: str):
         """Commit w MW at hour t using sell borrow then normal commit_at.
@@ -933,14 +931,13 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
     if not sporadic_input:
         return log
 
-    absorber = SlackAbsorber(schedule, proc, pv_forecast)
+    absorber = SlackAbsorber(schedule, proc, pv_forecast) 
 
     items = (sporadic_input.items() if isinstance(sporadic_input, dict)
              else [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)])
 
     for sid, sj in items:
         sid     = str(sid)
-        # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
         r       = int(sj.get("r", sj.get("release")))
         if "d" in sj:
             d_abs = min(r + int(sj["d"]) - 1, H)
@@ -950,20 +947,20 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
         w       = float(sj["w"])
         preempt = int(sj.get("preempt", 1))
 
-        window = list(range(r, min(d_abs, H) + 1))
+        window = list(range(r, min(d_abs, H) + 1)) # release to hard deadline
 
         chosen = []
         reason = None
-        if preempt == 0:
+        if preempt == 0: # 不可中斷，找一塊連續且長度為 e 的區間
             for start in range(r, min(d_abs, H) - e + 2):
                 block = list(range(start, start + e))
                 if all(absorber.slack_at(tt) >= w - EPS for tt in block):
                     chosen = block
                     break
-            if not chosen:
+            if not chosen: 
                 reason = (f"no contiguous block of {e}h with >={w}MW slack "
                           f"in [{r},{d_abs}]")
-        else:
+        else: # 可中斷，找任意 e 個小時
             feasible = [tt for tt in window if absorber.slack_at(tt) >= w - EPS]
             if len(feasible) >= e:
                 chosen = feasible[:e]
@@ -971,7 +968,7 @@ def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast):
                 reason = (f"only {len(feasible)} feasible hours, need {e} "
                           f"(window [{r},{d_abs}], w={w})")
 
-        if chosen:
+        if chosen: # 調用電力
             committed = []
             for tt in chosen:
                 leftover = absorber.commit_at(tt, w, sid)
