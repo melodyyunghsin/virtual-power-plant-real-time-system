@@ -774,7 +774,13 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         if w_remaining <= EPS:
             return 0.0, used_borrow
 
+        # Hide sell from commit_at so it cannot peel beyond the cap already
+        # exhausted by the pre-divert above. commit_at's Step 1 short-circuits
+        # when rec["sell"] is 0, then routes the remainder through gen/PV ramp.
+        saved_sell = rec["sell"]
+        rec["sell"] = 0.0
         residual = absorber.commit_at(t, w_remaining, target_jid)
+        rec["sell"] = saved_sell
         return residual, used_borrow
 
     def _find_contiguous(r_lo, r_hi, e_len, w_need, slack_fn=None):
