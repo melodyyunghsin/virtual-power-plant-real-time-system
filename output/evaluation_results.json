@@ -33,7 +33,7 @@
     "self_discharge_rate": 0.002,
     "aging_cost_per_MWh": 8.0,
     "total_aging_cost": 3115.65,
-    "soc_dep_discharge_binding_hours": 31,
+    "soc_dep_discharge_binding_hours": 34,
     "market_mechanism": {
       "cancellation_penalty_rate": 0.3,
       "total_day_ahead_commit_MWh": 3912.7548,
