@@ -706,9 +706,11 @@ def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast):
         orig    = original_sell[t]
         return max(0.0, current - orig * 0.5)
 
-    def _aggressive_slack(t: int) -> float: 
-        """Normal slack plus the remaining sell-borrow allowance."""
-        return absorber.slack_at(t) + _extra_borrow(t)
+    def _aggressive_slack(t):
+        """Replace the unrestricted sell portion with the capped portion."""
+        other = absorber.slack_at(t) - schedule[t - 1]["sell"]
+        return other + _extra_borrow(t)
+
 
     def _commit_aggressive(t: int, w: float, target_jid: str):
         """Commit w MW at hour t using sell borrow then normal commit_at.
