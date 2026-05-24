@@ -2,24 +2,28 @@
   "acceptance_test_log": [
     {
       "job_id": "s1",
-      "decision": "reject",
-      "arrival": 10,
-      "release": 10,
-      "deadline": 14,
+      "decision": "accept",
+      "arrival": 5,
+      "release": 5,
+      "deadline": 12,
       "e": 2,
-      "w": 8.0,
-      "reason": "only 1 feasible hours, need 2 (window [10,14], w=8.0)",
+      "w": 12.0,
+      "slots": [
+        5,
+        6
+      ],
       "caused_violation": false
     },
     {
       "job_id": "s2",
       "decision": "accept",
-      "arrival": 22,
-      "release": 22,
-      "deadline": 24,
-      "e": 2,
-      "w": 15.0,
+      "arrival": 20,
+      "release": 20,
+      "deadline": 29,
+      "e": 3,
+      "w": 16.0,
       "slots": [
+        21,
         22,
         23
       ],
@@ -27,43 +31,40 @@
     },
     {
       "job_id": "s3",
-      "decision": "accept",
-      "arrival": 50,
-      "release": 50,
-      "deadline": 60,
-      "e": 3,
-      "w": 18.0,
-      "slots": [
-        50,
-        51,
-        52
-      ],
+      "decision": "reject",
+      "arrival": 35,
+      "release": 35,
+      "deadline": 37,
+      "e": 1,
+      "w": 20.0,
+      "reason": "only 0 feasible hours, need 1 (window [35,37], w=20.0)",
       "caused_violation": false
     },
     {
       "job_id": "s4",
       "decision": "accept",
-      "arrival": 68,
-      "release": 68,
-      "deadline": 72,
+      "arrival": 48,
+      "release": 48,
+      "deadline": 54,
       "e": 2,
-      "w": 20.0,
+      "w": 10.0,
       "slots": [
-        68,
-        69
+        48,
+        49
       ],
       "caused_violation": false
     },
     {
       "job_id": "s5",
       "decision": "accept",
-      "arrival": 5,
-      "release": 5,
-      "deadline": 8,
-      "e": 1,
-      "w": 12.0,
+      "arrival": 61,
+      "release": 61,
+      "deadline": 70,
+      "e": 2,
+      "w": 14.0,
       "slots": [
-        5
+        61,
+        62
       ],
       "caused_violation": false
     }
@@ -72,48 +73,47 @@
     {
       "job_id": "a1",
       "decision": "scheduled_on_time",
-      "release": 7,
-      "soft_deadline": 15,
+      "release": 2,
+      "soft_deadline": 21,
       "e": 2,
-      "w": 6.0,
+      "w": 8.0,
       "slots": [
-        7,
-        8
+        2,
+        3
       ],
-      "completion": 8,
+      "completion": 3,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false
     },
     {
-      "job_id": "a8",
-      "decision": "scheduled_late",
-      "release": 12,
-      "soft_deadline": 20,
-      "e": 2,
-      "w": 11.0,
+      "job_id": "a2",
+      "decision": "scheduled_on_time",
+      "release": 9,
+      "soft_deadline": 33,
+      "e": 3,
+      "w": 12.0,
       "slots": [
-        21,
-        22
+        9,
+        10,
+        21
       ],
-      "completion": 22,
-      "tardiness": 2,
-      "missed_soft_deadline": true,
+      "completion": 21,
+      "tardiness": 0,
+      "missed_soft_deadline": false,
       "via_sell_borrow": false
     },
     {
-      "job_id": "a2",
+      "job_id": "a4",
       "decision": "scheduled_on_time",
-      "release": 20,
-      "soft_deadline": 30,
-      "e": 3,
-      "w": 10.0,
+      "release": 26,
+      "soft_deadline": 35,
+      "e": 1,
+      "w": 15.0,
       "slots": [
-        21,
-        22,
-        23
+        26
       ],
-      "completion": 23,
+      "completion": 26,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false
@@ -121,10 +121,28 @@
     {
       "job_id": "a3",
       "decision": "scheduled_on_time",
-      "release": 35,
-      "soft_deadline": 45,
+      "release": 17,
+      "soft_deadline": 44,
+      "e": 4,
+      "w": 10.0,
+      "slots": [
+        21,
+        22,
+        23,
+        24
+      ],
+      "completion": 24,
+      "tardiness": 0,
+      "missed_soft_deadline": false,
+      "via_sell_borrow": false
+    },
+    {
+      "job_id": "a5",
+      "decision": "scheduled_on_time",
+      "release": 34,
+      "soft_deadline": 48,
       "e": 2,
-      "w": 8.0,
+      "w": 7.0,
       "slots": [
         44,
         45
@@ -135,52 +153,18 @@
       "via_sell_borrow": false
     },
     {
-      "job_id": "a4",
+      "job_id": "a6",
       "decision": "scheduled_on_time",
-      "release": 40,
-      "soft_deadline": 48,
-      "e": 4,
-      "w": 12.0,
+      "release": 42,
+      "soft_deadline": 59,
+      "e": 3,
+      "w": 13.0,
       "slots": [
         44,
         45,
-        46,
-        47
+        46
       ],
-      "completion": 47,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": false
-    },
-    {
-      "job_id": "a5",
-      "decision": "scheduled_on_time",
-      "release": 55,
-      "soft_deadline": 62,
-      "e": 2,
-      "w": 15.0,
-      "slots": [
-        55,
-        56
-      ],
-      "completion": 56,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": false
-    },
-    {
-      "job_id": "a6",
-      "decision": "scheduled_on_time",
-      "release": 60,
-      "soft_deadline": 68,
-      "e": 3,
-      "w": 9.0,
-      "slots": [
-        60,
-        61,
-        62
-      ],
-      "completion": 62,
+      "completion": 46,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false
@@ -188,10 +172,44 @@
     {
       "job_id": "a7",
       "decision": "scheduled_on_time",
+      "release": 50,
+      "soft_deadline": 69,
+      "e": 4,
+      "w": 9.0,
+      "slots": [
+        50,
+        51,
+        52,
+        53
+      ],
+      "completion": 53,
+      "tardiness": 0,
+      "missed_soft_deadline": false,
+      "via_sell_borrow": false
+    },
+    {
+      "job_id": "a8",
+      "decision": "scheduled_on_time",
+      "release": 58,
+      "soft_deadline": 69,
+      "e": 2,
+      "w": 11.0,
+      "slots": [
+        58,
+        59
+      ],
+      "completion": 59,
+      "tardiness": 0,
+      "missed_soft_deadline": false,
+      "via_sell_borrow": false
+    },
+    {
+      "job_id": "a9",
+      "decision": "scheduled_on_time",
       "release": 65,
-      "soft_deadline": 70,
+      "soft_deadline": 71,
       "e": 1,
-      "w": 14.0,
+      "w": 5.0,
       "slots": [
         66
       ],

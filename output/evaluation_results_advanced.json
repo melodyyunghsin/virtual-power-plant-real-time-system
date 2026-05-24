@@ -1,11 +1,11 @@
 {
   "hard_deadline_miss_rate": 0.0,
   "soft_deadline_miss_rate": 0.0,
-  "generator_cost": 302700.0,
-  "market_revenue": 357866.38,
-  "cancellation_penalty": 316.7,
-  "net_market_revenue": 357549.68,
-  "objective_value": -55166.38,
+  "generator_cost": 295300.0,
+  "market_revenue": 351924.59,
+  "cancellation_penalty": 412.13,
+  "net_market_revenue": 351512.46,
+  "objective_value": -56624.59,
   "acceptance_test": {
     "total": 5,
     "accepted": 4,
@@ -17,28 +17,28 @@
     "window_size": 12,
     "replan_interval": 6,
     "deviation_threshold": 0.15,
-    "total_replans": 25,
+    "total_replans": 26,
     "replan_failures": 0,
     "replan_triggers": {
       "pv_deviation": 3,
       "sporadic_arrival": 4,
       "periodic_6h": 12,
-      "aperiodic_arrival": 8
+      "aperiodic_arrival": 9
     },
-    "total_cancellation_penalty": 316.7,
+    "total_cancellation_penalty": 412.13,
     "vs_static": {
-      "objective_value_static": -40899.53,
-      "objective_value_dynamic": -55166.38,
+      "objective_value_static": -52210.45,
+      "objective_value_dynamic": -56624.59,
       "generator_cost_static": 285100.0,
-      "generator_cost_dynamic": 302700.0,
-      "generator_cost_change": 17600.0,
-      "market_revenue_static": 335999.53,
-      "market_revenue_dynamic": 357866.38,
-      "market_revenue_change": 21866.85,
-      "cancellation_penalty_total": 316.7,
-      "soft_miss_rate_static": 0.125,
+      "generator_cost_dynamic": 295300.0,
+      "generator_cost_change": 10200.0,
+      "market_revenue_static": 337310.45,
+      "market_revenue_dynamic": 351924.59,
+      "market_revenue_change": 14614.14,
+      "cancellation_penalty_total": 412.13,
+      "soft_miss_rate_static": 0.0,
       "soft_miss_rate_dynamic": 0.0,
-      "sporadic_value_rate_static": 0.8,
+      "sporadic_value_rate_static": 0.9,
       "sporadic_value_rate_dynamic": 1.0
     }
   }
