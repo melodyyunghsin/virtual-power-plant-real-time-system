@@ -27,7 +27,7 @@ import pulp
 
 
 H = 72              # planning horizon (hours)
-ALPHA = 10000       # aperiodic miss penalty ($ per miss)
+ALPHA = 10000       # aperiodic miss penalty ($ per miss) 巨大懲罰
 EPS = 1e-6          # numerical zero-threshold for output filtering
 
 # Day-ahead reservation strategy: each on-generator must leave this much
@@ -212,26 +212,26 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
     prob = pulp.LpProblem("VPP_DayAhead", pulp.LpMinimize)
 
     # ------------------------------------------------------------------ vars
-    P = pulp.LpVariable.dicts("P", (proc_ids, T), lowBound=0)
+    P = pulp.LpVariable.dicts("P", (proc_ids, T), lowBound=0) # 各設備之輸出功率
 
-    u     = pulp.LpVariable.dicts("u",     (gen_ids, T), cat="Binary")
-    z_on  = pulp.LpVariable.dicts("zon",   (gen_ids, T), cat="Binary")
-    z_off = pulp.LpVariable.dicts("zoff",  (gen_ids, T), cat="Binary")
+    u     = pulp.LpVariable.dicts("u",     (gen_ids, T), cat="Binary") # 發電機 On/ Off
+    z_on  = pulp.LpVariable.dicts("zon",   (gen_ids, T), cat="Binary") # 是否正在開機
+    z_off = pulp.LpVariable.dicts("zoff",  (gen_ids, T), cat="Binary") # 是否正在關機
 
-    chg   = pulp.LpVariable.dicts("chg",   (bat_ids, T), lowBound=0)
-    dis   = pulp.LpVariable.dicts("dis",   (bat_ids, T), lowBound=0)
-    soc   = pulp.LpVariable.dicts("soc",   (bat_ids, T), lowBound=0)
-    v_chg   = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary")
-    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1)
+    chg   = pulp.LpVariable.dicts("chg",   (bat_ids, T), lowBound=0) # 電池充電率
+    dis   = pulp.LpVariable.dicts("dis",   (bat_ids, T), lowBound=0) # 電池放電率
+    soc   = pulp.LpVariable.dicts("soc",   (bat_ids, T), lowBound=0) # 電池電量
+    v_chg   = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary") # 1: 充電模式/ 0: 放電模式或閒置
+    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1) # 電池電量之佔比
 
-    sell        = pulp.LpVariable.dicts("sell",       T, lowBound=0)
-    sell_share  = pulp.LpVariable.dicts("sellshare",  (proc_ids, T), lowBound=0)
-    commit      = pulp.LpVariable.dicts("commit",     T, lowBound=0)
-    pen         = pulp.LpVariable.dicts("pen",        T, lowBound=0)
+    sell        = pulp.LpVariable.dicts("sell",       T, lowBound=0) # 賣給市場的總功率
+    sell_share  = pulp.LpVariable.dicts("sellshare",  (proc_ids, T), lowBound=0) # 各個設備賣給市場的功率
+    commit      = pulp.LpVariable.dicts("commit",     T, lowBound=0) # Phase 1 承諾賣給市場的功率
+    pen         = pulp.LpVariable.dicts("pen",        T, lowBound=0) # commit - sell
 
     # job execution variables (only inside [release, deadline] window)
-    x = {}   # x[jid][t]
-    y = {}   # y[jid][s] — only for non-preemptive
+    x = {}   # x[jid][t] 任務 j 是否在時間 t 執行
+    y = {}   # y[jid][s] — only for non-preemptive, 任務是否在時間 s 「開始」執行
     for j in real_jobs:
         jid = j["id"]
         x[jid] = {
@@ -252,7 +252,7 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
     }
 
     # K[jid][i][t] — per-job allocation (only for t in window)
-    K = {}
+    K = {} # 任務 j 在時間 t 從哪一台發電機或電池 i 拿了多少電
     for j in real_jobs:
         jid = j["id"]
         K[jid] = {i: {} for i in proc_ids}
@@ -276,18 +276,18 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
             }
 
     # ----------------------------------------------------------- objective
-    f1 = pulp.lpSum(miss.values()) if miss else 0
+    f1 = pulp.lpSum(miss.values()) if miss else 0 
     f2 = pulp.lpSum(
         gen_by_id[g]["cost_fixed"]    * u[g][t]
         + gen_by_id[g]["cost_variable"] * P[g][t]
         for g in gen_ids for t in T
     ) + pulp.lpSum(
-        float(bat_by_id[b].get("aging_cost", 0.0)) * P[b][t]
+        float(bat_by_id[b].get("aging_cost", 0.0)) * P[b][t] # Level 2
         for b in bat_ids for t in T
     )
     f3 = (-pulp.lpSum(price_arr[t] * sell[t] for t in T)
-          + pulp.lpSum(cancel_rate * price_arr[t] * pen[t] for t in T))
-    prob += ALPHA * f1 + f2 + f3, "TotalCost"
+          + pulp.lpSum(cancel_rate * price_arr[t] * pen[t] for t in T)) # Level 2
+    prob += ALPHA * f1 + f2 + f3, "TotalCost" 
 
     # ----------------------------------------------------------- job execution
     for j in real_jobs:
@@ -296,15 +296,15 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
         total_x = pulp.lpSum(x[jid].values())
         if j["kind"] == "aperiodic":
             # missed → no execution; otherwise exactly e hours
-            prob += total_x == e * (1 - miss[jid]), f"jobE_{jid}"
+            prob += total_x == e * (1 - miss[jid]), f"jobE_{jid}" # C4
         else:
-            prob += total_x == e, f"jobE_{jid}"
+            prob += total_x == e, f"jobE_{jid}" # C3
 
         # non-preemptive: pick exactly one start, x = sum of covering starts
         if j["preempt"] == 0:
             sum_y = pulp.lpSum(y[jid].values())
             if j["kind"] == "aperiodic":
-                prob += sum_y == 1 - miss[jid], f"oneStart_{jid}"
+                prob += sum_y == 1 - miss[jid], f"oneStart_{jid}" # C5
             else:
                 prob += sum_y == 1, f"oneStart_{jid}"
             for t in x[jid]:
