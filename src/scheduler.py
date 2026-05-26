@@ -657,459 +657,226 @@ class SlackAbsorber:
 
 
 # =============================================================================
-# Phase 3 — Aperiodic queue
+# Online Phase — time-ordered sporadic + aperiodic processing
 # =============================================================================
 
-def phase3_aperiodic(schedule, aperiodic_jobs, proc, pv_forecast,
-                     err_std=0.0, price_arr=None):
-    """Soft-deadline scheduling for aperiodic jobs (EDF order).
+INF = float("inf")
 
-    Two-attempt strategy per job:
-      Attempt 1 — normal slack
-        slack[t] = sell[t] + on-generator spinning reserve + PV under-use.
-        Try to fit e hours within [release, soft_deadline]; if not possible,
-        try within [release, H] (late placement).
 
-      Attempt 2 — sell borrow (only if attempt 1 found no on-time slots)
-        Effective slack[t] += min(extra_borrow[t], original_sell[t] * 0.5)
-        where extra_borrow[t] = max(0, sell_before_commit - orig_sell[t] * 0.5).
-        Commit pre-diverts the extra portion of sell to the job before calling
-        the normal commit path for the remainder.
-        Log entries set via_sell_borrow=True when this path is taken.
+def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
+                 pv_forecast, err_std=0.0, price_arr=None):
+    """Replaces Phase 2 + Phase 3 with a single release-time-ordered pass.
 
-    Mutates `schedule` in place. Returns list of log decisions.
+    Behaviour:
+      - Arrivals are sorted by release hour; sporadic jobs win ties so the
+        hard-deadline policy takes precedence over the soft-deadline one.
+      - Each job sees the schedule as already mutated by every earlier
+        arrival — true online semantics.
+      - For sporadic: standard acceptance test. Slots are the e hours in
+        [release, hard_deadline] with the smallest sell-borrow cost. Accept
+        if a feasible set exists; else reject and log a reason.
+      - For aperiodic: per spec C4 (must execute e hours by H) we always
+        place. Prefer the cheapest on-time placement; fall back to the
+        cheapest late placement in [release, H] only when on-time is
+        infeasible. "Late" means missed_soft_deadline=True (counts toward
+        f1) but the job still executes.
+      - Commits use `_commit_min_sell` (gen + PV ramp first, sell only for
+        the residual), so peak-price sell hours are preserved by default.
+
+    Returns (acceptance_log, aperiodic_log).
     """
-    log = []
-    if not aperiodic_jobs:
-        return log
-
     absorber = SlackAbsorber(schedule, proc, pv_forecast, err_std=err_std)
 
-    # Snapshot of sell values produced by Phase 1+2 (before any Phase 3 commits).
-    # Used as the reference for the 50%-of-original sell-borrow cap.
-    original_sell: dict[int, float] = {
-        t: schedule[t - 1]["sell"] for t in range(1, H + 1)
-    }
-
-    sorted_jobs = sorted(aperiodic_jobs,
-                         key=lambda j: (j["deadline"], j["release"])) # Deadline-first, then release-first
-
-    # ------------------------------------------------------------------ helpers
-
-    def _extra_borrow(t: int) -> float:
-        """Extra MW Phase 3 may still divert from sell at hour t.
-
-        Phase 3 is allowed to reduce sell[t] by at most 50 % of original_sell[t].
-        Already borrowed = original_sell[t] - current_sell[t].
-        Remaining = max(0, 50 % × original - already borrowed)
-                  = max(0, current_sell[t] - original_sell[t] × 0.5).
-        """
-        current = schedule[t - 1]["sell"]
-        orig    = original_sell[t]
-        return max(0.0, current - orig * 0.5)
-
-    def _normal_slack(t: int) -> float:
-        """Attempt-1 slack: spinning reserve + PV underuse only.
-
-        Sell is intentionally excluded — Phase 3 only touches sell via the
-        capped Attempt-2 borrow path. (Phase 2 sporadic acceptance still uses
-        `absorber.slack_at`, which retains the full sell contribution, since
-        sporadic jobs have hard deadlines and higher priority for sell.)
-        """
+    def _normal_slack(t):
+        """Slack without sell — gen ramp + PV underuse."""
         return absorber.slack_at(t) - schedule[t - 1]["sell"]
 
-    def _aggressive_slack(t):
-        """Attempt-2 slack: spinning reserve + PV + remaining sell-borrow cap."""
-        return _normal_slack(t) + _extra_borrow(t)
-
-    def _full_borrow(t: int) -> float:
-        """Attempt-3 borrow allowance: all remaining current sell at hour t."""
-        return schedule[t - 1]["sell"]
-
-    def _full_slack(t: int) -> float:
-        """Attempt-3 slack: spinning reserve + PV + ALL remaining sell."""
-        return _normal_slack(t) + _full_borrow(t)
-
-    def _estimate_revenue_loss(slots, w_need) -> float:
-        """Estimated $ lost in market revenue if we cover (slots × w_need)
-        by borrowing from sell whatever `_normal_slack` cannot supply.
-
-        For each slot, sell_take = max(0, w_need − normal_slack), so the
-        loss = Σ sell_take · price[t]. Reads current schedule state, so
-        prior Phase-3 commits at the same slots are already reflected.
+    def _hour_cost(t, w):
+        """Estimated $ of sell borrow at hour t to satisfy w MWh.
+        Returns INF if even 100% sell + gen + PV cannot satisfy w.
         """
+        free = _normal_slack(t)
+        avail = free + schedule[t - 1]["sell"]
+        if avail < w - EPS:
+            return INF
+        sell_needed = max(0.0, w - free)
         if price_arr is None:
-            return 0.0
-        loss = 0.0
-        for tt in slots:
-            need_from_sell = max(0.0, w_need - _normal_slack(tt))
-            avail_sell     = schedule[tt - 1]["sell"]
-            sell_take      = min(need_from_sell, avail_sell)
-            loss += sell_take * float(price_arr[tt])
-        return loss
+            return sell_needed              # rank by raw MWh of sell if no prices
+        return sell_needed * float(price_arr[t])
 
-    def _commit_normal(t: int, w: float, target_jid: str) -> float:
-        """Attempt-1 commit: route w MW through generator ramp / PV only.
+    def _find_min_cost(r, end, e_len, w_need, preempt):
+        """Return (slots, total_cost) for the cheapest feasible placement of
+        e_len hours of w_need MWh inside [r, end], or (None, INF) if none.
+        For preempt=1: pick the e cheapest individual hours.
+        For preempt=0: pick the cheapest sliding window of e consecutive hours.
+        """
+        if r > end or end - r + 1 < e_len:
+            return None, INF
+        if preempt:
+            ranked = sorted(range(r, end + 1), key=lambda t: _hour_cost(t, w_need))
+            chosen = ranked[:e_len]
+            total = sum(_hour_cost(t, w_need) for t in chosen)
+            if total >= INF:
+                return None, INF
+            return sorted(chosen), total
+        best_window, best_cost = None, INF
+        for start in range(r, end - e_len + 2):
+            window = list(range(start, start + e_len))
+            total = sum(_hour_cost(t, w_need) for t in window)
+            if total < best_cost:
+                best_cost, best_window = total, window
+        if best_cost >= INF:
+            return None, INF
+        return best_window, best_cost
 
-        Hides sell from `commit_at` so Step 1 (peel-from-sell) short-circuits
-        and the demand is sourced from gen/PV ramp instead.
+    def _commit_min_sell(t, w, jid):
+        """Allocate w MWh at hour t, using gen + PV ramp first and sell only
+        for the unmet residual. Returns (residual, sell_taken).
         """
         rec = schedule[t - 1]
+        # Step 1: gen + PV (sell hidden so commit_at skips Step 1).
         saved_sell = rec["sell"]
         rec["sell"] = 0.0
-        residual = absorber.commit_at(t, w, target_jid)
+        residual = absorber.commit_at(t, w, jid)
         rec["sell"] = saved_sell
-        return residual
-
-    def _commit_aggressive(t: int, w: float, target_jid: str,
-                           borrow_fn=None):
-        """Commit w MW at hour t using sell borrow then normal commit_at.
-
-        `borrow_fn(t)` returns the maximum MWh we may divert from sell at
-        hour t. Defaults to `_extra_borrow` (Attempt 2, 50 % cap); pass
-        `_full_borrow` for Attempt 3 (100 % of current sell).
-
-        Pre-diverts min(borrow_fn(t), w) MW from sell to the job, then
-        delegates the remainder to commit_at with sell hidden so it cannot
-        peel beyond the per-attempt allowance.
-
-        Returns (residual, used_borrow):
-            residual   – MW not committed (> 0 only if slack was overestimated).
-            used_borrow – True when the sell-borrow path was actually invoked.
-        """
-        if borrow_fn is None:
-            borrow_fn = _extra_borrow
-        rec  = schedule[t - 1]
-        orig = original_sell[t]
-
-        extra_avail = borrow_fn(t)          # MW still borrowable from sell
-
-        used_borrow = False
-        w_remaining = w
-
-        if extra_avail > EPS:
-            # Pre-commit up to extra_avail from sell before normal commit_at.
-            take_extra = min(extra_avail, w_remaining)
-            sell_now   = rec["sell"]
-            take_extra = min(take_extra, sell_now)  # sell cannot go below 0
-
-            if take_extra > EPS:
-                rec["sell"] = round(sell_now - take_extra, 4)
-                if "day_ahead_commit" in rec:
-                    rec["day_ahead_commit"] = round(
-                        max(0.0, rec["day_ahead_commit"] - take_extra), 4
-                    )
-                used_borrow = True
-
-                # Attribute take_extra to the job from whichever processors
-                # have free capacity (P[i] − Σk[j][i] > 0 at this hour).
-                already: dict[str, float] = {i: 0.0 for i in rec["P"]}
-                for k_ent in rec["k"].values():
-                    for i, v in k_ent.items():
-                        if i in already:
-                            already[i] += v
-
-                to_dist = take_extra
-                for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
-                    free = p_val - already.get(i, 0.0)
-                    give = min(to_dist, free)
-                    if give > EPS:
-                        if target_jid in rec["k"]:
-                            rec["k"][target_jid][i] = round(
-                                rec["k"][target_jid].get(i, 0.0) + give, 4
-                            )
-                        else:
-                            rec["k"][target_jid] = {i: round(give, 4)}
-                        already[i] = already.get(i, 0.0) + give
-                        to_dist   -= give
-                    if to_dist <= EPS:
-                        break
-
-                committed_extra = take_extra - to_dist
-                w_remaining    -= committed_extra
-
-        if w_remaining <= EPS:
-            return 0.0, used_borrow
-
-        # Hide sell from commit_at so it cannot peel beyond the cap already
-        # exhausted by the pre-divert above. commit_at's Step 1 short-circuits
-        # when rec["sell"] is 0, then routes the remainder through gen/PV ramp.
-        saved_sell = rec["sell"]
-        rec["sell"] = 0.0
-        residual = absorber.commit_at(t, w_remaining, target_jid)
-        rec["sell"] = saved_sell
-        return residual, used_borrow
-
-    def _find_contiguous(r_lo, r_hi, e_len, w_need, slack_fn=None):
-        """First contiguous block of e_len hours in [r_lo, r_hi] with slack ≥ w."""
-        if slack_fn is None:
-            slack_fn = absorber.slack_at
-        for start in range(r_lo, r_hi - e_len + 2):
-            block = list(range(start, start + e_len))
-            if all(slack_fn(tt) >= w_need - EPS for tt in block):
-                return block
-        return []
-
-    # ------------------------------------------------------------------ main loop
-
-    for j in sorted_jobs:
-        jid     = j["id"]
-        r       = int(j["release"])
-        d       = int(j["deadline"])    # soft deadline (absolute hour)
-        e       = int(j["e"])
-        w       = float(j["w"])
-        preempt = int(j.get("preempt", 1))
-
-        slots           = []
-        decision        = None
-        via_sell_borrow = False
-        borrow_fn       = _extra_borrow   # which cap the commit path enforces
-
-        # ── Attempt 1: spinning reserve + PV only (sell reserved for Attempt 2)
-
-        if preempt == 0:
-            slots = _find_contiguous(r, min(d, H), e, w, _normal_slack)
-            if slots:
-                decision = "scheduled_on_time"
-            else:
-                slots = _find_contiguous(r, H, e, w, _normal_slack)
-                if slots:
-                    decision = "scheduled_late"
-        else:
-            on_window   = list(range(r, min(d, H) + 1))
-            feasible_on = [tt for tt in on_window
-                           if _normal_slack(tt) >= w - EPS]
-            if len(feasible_on) >= e:
-                slots    = feasible_on[:e]
-                decision = "scheduled_on_time"
-            else:
-                late_window   = list(range(r, H + 1))
-                feasible_late = [tt for tt in late_window
-                                 if _normal_slack(tt) >= w - EPS]
-                if len(feasible_late) >= e:
-                    slots    = feasible_late[:e]
-                    decision = "scheduled_late"
-
-        # ── Attempt 2: sell borrow (up to 50 % of original sell per hour) ───
-        # Only triggered when attempt 1 found no on-time placement.
-
-        if not slots:
-            if preempt == 0:
-                slots = _find_contiguous(r, min(d, H), e, w, _aggressive_slack)
-                if slots:
-                    decision        = "scheduled_on_time"
-                    via_sell_borrow = True
+        if residual <= EPS:
+            return 0.0, 0.0
+        # Step 2: take from sell for the residual.
+        sell_take = min(residual, rec["sell"])
+        if sell_take <= EPS:
+            return residual, 0.0
+        rec["sell"] = round(rec["sell"] - sell_take, 4)
+        if "day_ahead_commit" in rec:
+            rec["day_ahead_commit"] = round(
+                max(0.0, rec["day_ahead_commit"] - sell_take), 4
+            )
+        already = {i: 0.0 for i in rec["P"]}
+        for k_ent in rec["k"].values():
+            for i, v in k_ent.items():
+                if i in already:
+                    already[i] += v
+        to_dist = sell_take
+        for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
+            free = p_val - already.get(i, 0.0)
+            give = min(to_dist, free)
+            if give > EPS:
+                if jid in rec["k"]:
+                    rec["k"][jid][i] = round(rec["k"][jid].get(i, 0.0) + give, 4)
                 else:
-                    slots = _find_contiguous(r, H, e, w, _aggressive_slack)
-                    if slots:
-                        decision        = "scheduled_late"
-                        via_sell_borrow = True
-            else:
-                on_window = list(range(r, min(d, H) + 1))
-                feasible  = [tt for tt in on_window
-                             if _aggressive_slack(tt) >= w - EPS]
-                if len(feasible) >= e:
-                    slots           = feasible[:e]
-                    decision        = "scheduled_on_time"
-                    via_sell_borrow = True
-                else:
-                    late_window   = list(range(r, H + 1))
-                    feasible_late = [tt for tt in late_window
-                                     if _aggressive_slack(tt) >= w - EPS]
-                    if len(feasible_late) >= e:
-                        slots           = feasible_late[:e]
-                        decision        = "scheduled_late"
-                        via_sell_borrow = True
+                    rec["k"][jid] = {i: round(give, 4)}
+                already[i] = already.get(i, 0.0) + give
+                to_dist -= give
+            if to_dist <= EPS:
+                break
+        committed_sell = sell_take - to_dist
+        return residual - committed_sell, committed_sell
 
-        # ── Attempt 3: borrow up to 100 % of sell, gated by economics ───────
-        # Only triggered when Attempts 1 & 2 found nothing. We allow the full
-        # remaining sell at each slot, but only commit if the estimated
-        # revenue loss is less than the miss penalty (ALPHA).
+    # ------- Build unified release-ordered arrival list ----------------------
+    sporadic_items = (
+        sporadic_input.items() if isinstance(sporadic_input, dict)
+        else [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)]
+    )
+    arrivals = []
+    for sid, sj in sporadic_items:
+        r = int(sj.get("r", sj.get("release")))
+        arrivals.append((r, 0, "sporadic", str(sid), sj))   # tie-break: 0 = sporadic first
+    for aj in aperiodic_jobs:
+        arrivals.append((aj["release"], 1, "aperiodic", aj["id"], aj))
+    arrivals.sort(key=lambda x: (x[0], x[1]))
 
-        if not slots:
-            candidate = []
-            cand_decision = None
-            if preempt == 0:
-                candidate = _find_contiguous(r, min(d, H), e, w, _full_slack)
-                if candidate:
-                    cand_decision = "scheduled_on_time"
-                else:
-                    candidate = _find_contiguous(r, H, e, w, _full_slack)
-                    if candidate:
-                        cand_decision = "scheduled_late"
-            else:
-                on_window = list(range(r, min(d, H) + 1))
-                feasible  = [tt for tt in on_window
-                             if _full_slack(tt) >= w - EPS]
-                if len(feasible) >= e:
-                    candidate, cand_decision = feasible[:e], "scheduled_on_time"
-                else:
-                    late_window = list(range(r, H + 1))
-                    feasible_late = [tt for tt in late_window
-                                     if _full_slack(tt) >= w - EPS]
-                    if len(feasible_late) >= e:
-                        candidate, cand_decision = feasible_late[:e], "scheduled_late"
+    acceptance_log = []
+    aperiodic_log = []
 
-            if candidate:
-                est_loss = _estimate_revenue_loss(candidate, w)
-                if est_loss < ALPHA:
-                    slots           = candidate
-                    decision        = cand_decision
-                    via_sell_borrow = True
-                    borrow_fn       = _full_borrow
+    # ------- Process each arrival in release order ---------------------------
+    for release_t, _, kind, jid, j in arrivals:
+        if kind == "sporadic":
+            sj = j
+            r = int(sj.get("r", sj.get("release")))
+            d_abs = (min(r + int(sj["d"]) - 1, H) if "d" in sj
+                     else int(sj.get("hard_deadline", sj.get("deadline", H))))
+            e = int(sj["e"])
+            w = float(sj["w"])
+            preempt = int(sj.get("preempt", 1))
 
-        # ── Commit ──────────────────────────────────────────────────────────
-
-        if slots:
-            ok           = True
-            actual_borrow = False
-            for tt in slots:
-                if via_sell_borrow:
-                    leftover, borrowed = _commit_aggressive(tt, w, jid,
-                                                            borrow_fn=borrow_fn)
-                    if borrowed:
-                        actual_borrow = True
-                else:
-                    leftover = _commit_normal(tt, w, jid)
-                if leftover > EPS:
-                    ok = False
-                    break
-
-            if ok:
-                completion = slots[-1]
-                tardiness  = max(0, completion - d)
-                missed     = (decision == "scheduled_late")
-                log.append({
-                    "job_id":               jid,
-                    "decision":             decision,
-                    "release":              r,
-                    "soft_deadline":        d,
-                    "e":                    e,
-                    "w":                    w,
-                    "slots":                slots,
-                    "completion":           completion,
-                    "tardiness":            tardiness,
-                    "missed_soft_deadline": missed,
-                    "via_sell_borrow":      actual_borrow,
-                })
-                if missed and 1 <= d <= H:
-                    schedule[d - 1]["missed_aperiodic"].append(jid)
-                continue
-
-        # ── No feasible placement ────────────────────────────────────────────
-
-        log.append({
-            "job_id":               jid,
-            "decision":             "skipped",
-            "release":              r,
-            "soft_deadline":        d,
-            "e":                    e,
-            "w":                    w,
-            "slots":                [],
-            "completion":           None,
-            "tardiness":            None,
-            "missed_soft_deadline": True,
-            "via_sell_borrow":      False,
-            "reason":               f"no slack window of {e}h with >={w}MW in [{r},{H}]",
-        })
-        if 1 <= d <= H:
-            schedule[d - 1]["missed_aperiodic"].append(jid)
-
-    return log
-
-
-# =============================================================================
-# Phase 2 — Sporadic acceptance test
-# =============================================================================
-
-def phase2_acceptance(schedule, sporadic_input, proc, pv_forecast, err_std=0.0):
-    """Online acceptance test for sporadic jobs (hard deadline).
-
-    For each arriving sporadic, compute total slack at each candidate hour;
-    accept only if e feasible slots exist in [release, hard_deadline]
-    (contiguous for non-preemptive). If accepted, commit via SlackAbsorber.
-
-    Mutates `schedule` in place. Returns a list of log entries.
-    """
-    log = []
-    if not sporadic_input:
-        return log
-
-    absorber = SlackAbsorber(schedule, proc, pv_forecast, err_std=err_std)
-
-    items = (sporadic_input.items() if isinstance(sporadic_input, dict)
-             else [(t.get("id", f"s{i}"), t) for i, t in enumerate(sporadic_input)])
-
-    for sid, sj in items:
-        sid     = str(sid)
-        r       = int(sj.get("r", sj.get("release")))
-        if "d" in sj:
-            d_abs = min(r + int(sj["d"]) - 1, H)
-        else:
-            d_abs = int(sj.get("hard_deadline", sj.get("deadline", H)))
-        e       = int(sj["e"])
-        w       = float(sj["w"])
-        preempt = int(sj.get("preempt", 1))
-
-        window = list(range(r, min(d_abs, H) + 1)) # release to hard deadline
-
-        chosen = []
-        reason = None
-        if preempt == 0: # 不可中斷，找一塊連續且長度為 e 的區間
-            for start in range(r, min(d_abs, H) - e + 2):
-                block = list(range(start, start + e))
-                if all(absorber.slack_at(tt) >= w - EPS for tt in block):
-                    chosen = block
-                    break
-            if not chosen: 
-                reason = (f"no contiguous block of {e}h with >={w}MW slack "
-                          f"in [{r},{d_abs}]")
-        else: # 可中斷，找任意 e 個小時
-            feasible = [tt for tt in window if absorber.slack_at(tt) >= w - EPS]
-            if len(feasible) >= e:
-                chosen = feasible[:e]
-            else:
-                reason = (f"only {len(feasible)} feasible hours, need {e} "
-                          f"(window [{r},{d_abs}], w={w})")
-
-        if chosen: # 調用電力
-            committed = []
-            for tt in chosen:
-                leftover = absorber.commit_at(tt, w, sid)
-                if leftover > EPS:
-                    reason = f"commit failed at t={tt}, residual={leftover:.3f}"
-                    committed = []
-                    break
-                committed.append(tt)
-            if committed:
-                log.append({
-                    "job_id":           sid,
-                    "decision":         "accept",
-                    "arrival":          r,
-                    "release":          r,
-                    "deadline":         d_abs,
-                    "e":                e,
-                    "w":                w,
-                    "slots":            committed,
+            slots, cost = _find_min_cost(r, min(d_abs, H), e, w, preempt)
+            if slots is None:
+                acceptance_log.append({
+                    "job_id": jid, "decision": "reject",
+                    "arrival": r, "release": r, "deadline": d_abs,
+                    "e": e, "w": w,
+                    "reason": (f"no feasible {e}h placement of {w}MW "
+                               f"in [{r},{d_abs}] (even at 100% sell)"),
                     "caused_violation": False,
                 })
+                if 1 <= r <= H:
+                    schedule[r - 1]["rejected_sporadic"].append(jid)
                 continue
 
-        log.append({
-            "job_id":           sid,
-            "decision":         "reject",
-            "arrival":          r,
-            "release":          r,
-            "deadline":         d_abs,
-            "e":                e,
-            "w":                w,
-            "reason":           reason or "insufficient slack",
-            "caused_violation": False,
-        })
-        if 1 <= r <= H:
-            schedule[r - 1]["rejected_sporadic"].append(sid)
+            sell_borrowed = 0.0
+            for tt in slots:
+                _resid, taken = _commit_min_sell(tt, w, jid)
+                sell_borrowed += taken
+            acceptance_log.append({
+                "job_id": jid, "decision": "accept",
+                "arrival": r, "release": r, "deadline": d_abs,
+                "e": e, "w": w,
+                "slots": slots,
+                "sell_borrowed": round(sell_borrowed, 4),
+                "cost_estimate": round(cost, 2),
+                "caused_violation": False,
+            })
 
-    return log
+        else:  # aperiodic — must execute (C4)
+            r = j["release"]
+            d_soft = j["deadline"]
+            e = j["e"]
+            w = j["w"]
+            preempt = j.get("preempt", 1)
+
+            # Prefer on-time when feasible.
+            slots, cost = _find_min_cost(r, min(d_soft, H), e, w, preempt)
+            on_time = slots is not None
+            if not on_time:
+                slots, cost = _find_min_cost(r, H, e, w, preempt)
+
+            if slots is None:
+                # Even late+100% sell can't fit → genuine infeasibility.
+                aperiodic_log.append({
+                    "job_id": jid, "decision": "infeasible",
+                    "release": r, "soft_deadline": d_soft,
+                    "e": e, "w": w, "slots": [],
+                    "completion": None, "tardiness": None,
+                    "missed_soft_deadline": True,
+                    "via_sell_borrow": False,
+                    "reason": (f"no feasible {e}h placement of {w}MW "
+                               f"in [{r},{H}] even at 100% sell"),
+                })
+                if 1 <= d_soft <= H:
+                    schedule[min(d_soft, H) - 1]["missed_aperiodic"].append(jid)
+                continue
+
+            sell_borrowed = 0.0
+            for tt in slots:
+                _resid, taken = _commit_min_sell(tt, w, jid)
+                sell_borrowed += taken
+            completion = max(slots)
+            tardiness = max(0, completion - d_soft)
+            decision = "scheduled_on_time" if on_time else "scheduled_late"
+            missed = not on_time
+            aperiodic_log.append({
+                "job_id": jid, "decision": decision,
+                "release": r, "soft_deadline": d_soft,
+                "e": e, "w": w, "slots": slots,
+                "completion": completion, "tardiness": tardiness,
+                "missed_soft_deadline": missed,
+                "via_sell_borrow": (sell_borrowed > EPS),
+                "sell_borrowed": round(sell_borrowed, 4),
+                "cost_estimate": round(cost, 2),
+            })
+            if missed and 1 <= d_soft <= H:
+                schedule[d_soft - 1]["missed_aperiodic"].append(jid)
+
+    return acceptance_log, aperiodic_log
 
 
 # =============================================================================
@@ -1182,12 +949,10 @@ def main():
         cancel_rate=cancel_rate, pv_actual=pv_actual, err_std=err_std
     )
 
-    acceptance_log = phase2_acceptance(
-        schedule, sporadic_input, proc, pv_forecast, err_std=err_std
-    )
-
-    aperiodic_log = phase3_aperiodic(
-        schedule, aperiodic_jobs, proc, pv_forecast,
+    # Single time-ordered online pass: sporadic acceptance test +
+    # aperiodic force-placement, processed in release-time order.
+    acceptance_log, aperiodic_log = online_phase(
+        schedule, sporadic_input, aperiodic_jobs, proc, pv_forecast,
         err_std=err_std, price_arr=price_arr,
     )
 
