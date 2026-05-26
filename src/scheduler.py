@@ -771,6 +771,171 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         committed_sell = sell_take - to_dist
         return residual - committed_sell, committed_sell
 
+    def _group_consecutive(slots):
+        """Split sorted slot list into maximal runs of consecutive hours."""
+        if not slots:
+            return []
+        ss = sorted(slots)
+        runs = [[ss[0]]]
+        for s in ss[1:]:
+            if s == runs[-1][-1] + 1:
+                runs[-1].append(s)
+            else:
+                runs.append([s])
+        return runs
+
+    def _commit_run_min_sell(run, w, jid):
+        """Joint LP commit over a consecutive run of hours.
+
+        Solves a small LP that simultaneously decides Δx (extra gen output),
+        Δp (extra PV output), and s (sell take) at every hour in the run,
+        respecting ramp_up/ramp_down constraints LINKING consecutive hours
+        inside the run as well as the original-schedule values at the run's
+        boundaries. Single-hour runs fall back to `_commit_min_sell`.
+
+        Returns total sell MWh borrowed across the run.
+        """
+        if len(run) == 1:
+            _, taken = _commit_min_sell(run[0], w, jid)
+            return taken
+
+        T = run
+        prob = pulp.LpProblem(f"joint_{jid}_{T[0]}_{T[-1]}", pulp.LpMinimize)
+
+        dx = {g: {t: pulp.LpVariable(f"dx_{g}_{t}", lowBound=0)
+                  for t in T} for g in absorber.gen_ids}
+        dp = {pv: {t: pulp.LpVariable(f"dp_{pv}_{t}", lowBound=0)
+                   for t in T} for pv in absorber.pv_ids}
+        s_t = {t: pulp.LpVariable(f"s_{t}", lowBound=0) for t in T}
+
+        # Objective: minimise sell × price (or raw MWh if no prices)
+        if price_arr is not None:
+            prob += pulp.lpSum(s_t[t] * float(price_arr[t]) for t in T), "MinSellCost"
+        else:
+            prob += pulp.lpSum(s_t[t] for t in T), "MinSellMWh"
+
+        # Per-hour demand and sell cap
+        for t in T:
+            prob += (pulp.lpSum(dx[g][t] for g in dx)
+                     + pulp.lpSum(dp[pv][t] for pv in dp)
+                     + s_t[t] == w), f"dem_{t}"
+            prob += s_t[t] <= schedule[t - 1]["sell"], f"sell_cap_{t}"
+
+        # Generator constraints: cap, ramp_up (incl. boundary in), ramp_down (boundary out)
+        for g in absorber.gen_ids:
+            gd = absorber.gens[g]
+            ru = float(gd["ramp_up_rate"])
+            rd = float(gd["ramp_down_rate"])
+            out_max = float(gd["output_max"])
+            for idx, t in enumerate(T):
+                rec = schedule[t - 1]
+                p_curr = rec["P"].get(g, 0.0)
+                # Off generators cannot be turned on inside Phase 3 (UT/DT not
+                # re-enforced); freeze Δx at 0.
+                if p_curr <= EPS:
+                    prob += dx[g][t] == 0, f"goff_{g}_{t}"
+                    continue
+                # Output cap
+                prob += p_curr + dx[g][t] <= out_max, f"omx_{g}_{t}"
+                # ramp_up at t (from t-1)
+                if idx == 0:
+                    p_prev = (schedule[t - 2]["P"].get(g, 0.0) if t > 1
+                              else float(gd.get("initial_energy", 0)))
+                    # If gen was off at t-1, ramp_up reduces to: new_P[t] <= ramp_up
+                    # (since p_prev = 0). Same form below handles it.
+                    prob += p_curr + dx[g][t] - p_prev <= ru, f"ru_{g}_{t}"
+                else:
+                    tp = T[idx - 1]
+                    p_prev_curr = schedule[tp - 1]["P"].get(g, 0.0)
+                    # Adjacent-hour ramp_up: (P[t]+dx[t]) - (P[tp]+dx[tp]) <= ru
+                    prob += ((p_curr + dx[g][t]) - (p_prev_curr + dx[g][tp])
+                             <= ru), f"ru_{g}_{t}"
+                # ramp_down at t (toward t+1)
+                if idx == len(T) - 1:
+                    p_next = (schedule[t]["P"].get(g, 0.0)
+                              if t < len(schedule) else p_curr)
+                    # (P[t]+dx[t]) - P[t+1] <= rd  →  dx[t] <= rd + P[t+1] - P[t]
+                    prob += p_curr + dx[g][t] - p_next <= rd, f"rd_{g}_{t}"
+                else:
+                    tn = T[idx + 1]
+                    p_next_curr = schedule[tn - 1]["P"].get(g, 0.0)
+                    # Symmetric: (P[t]+dx[t]) - (P[tn]+dx[tn]) <= rd
+                    prob += ((p_curr + dx[g][t]) - (p_next_curr + dx[g][tn])
+                             <= rd), f"rd_{g}_{t}"
+
+        # PV: robust capacity cap
+        for pv in absorber.pv_ids:
+            cap = absorber.pvs[pv]["capacity"]
+            for t in T:
+                rec = schedule[t - 1]
+                p_curr = rec["P"].get(pv, 0.0)
+                max_pv = cap * absorber.pv_forecast[pv][t] * absorber.robust
+                prob += p_curr + dp[pv][t] <= max_pv, f"pvmx_{pv}_{t}"
+
+        solver = pulp.PULP_CBC_CMD(msg=False)
+        prob.solve(solver)
+
+        if prob.status != pulp.LpStatusOptimal:
+            # Should not happen if _find_min_cost said feasible; fall back to
+            # hour-by-hour commit so we still place the job.
+            total = 0.0
+            for tt in T:
+                _, taken = _commit_min_sell(tt, w, jid)
+                total += taken
+            return total
+
+        def _val(x):
+            v = pulp.value(x)
+            return float(v) if v is not None else 0.0
+
+        # Apply solution to schedule
+        total_sell_borrowed = 0.0
+        for t in T:
+            rec = schedule[t - 1]
+            # Increment gen P and attribute to job
+            for g in absorber.gen_ids:
+                inc = _val(dx[g][t])
+                if inc <= EPS:
+                    continue
+                rec["P"][g] = round(rec["P"].get(g, 0.0) + inc, 4)
+                rec["k"].setdefault(jid, {})
+                rec["k"][jid][g] = round(rec["k"][jid].get(g, 0.0) + inc, 4)
+            # Increment PV P and attribute to job
+            for pv in absorber.pv_ids:
+                inc = _val(dp[pv][t])
+                if inc <= EPS:
+                    continue
+                rec["P"][pv] = round(rec["P"].get(pv, 0.0) + inc, 4)
+                rec["k"].setdefault(jid, {})
+                rec["k"][jid][pv] = round(rec["k"][jid].get(pv, 0.0) + inc, 4)
+            # Sell take: redirect existing free P at this hour to the job
+            sell_take = _val(s_t[t])
+            if sell_take <= EPS:
+                continue
+            total_sell_borrowed += sell_take
+            rec["sell"] = round(rec["sell"] - sell_take, 4)
+            if "day_ahead_commit" in rec:
+                rec["day_ahead_commit"] = round(
+                    max(0.0, rec["day_ahead_commit"] - sell_take), 4)
+            already = {i: 0.0 for i in rec["P"]}
+            for k_ent in rec["k"].values():
+                for i, v in k_ent.items():
+                    if i in already:
+                        already[i] += v
+            to_dist = sell_take
+            for i, p_val in sorted(rec["P"].items(), key=lambda kv: -kv[1]):
+                free = p_val - already.get(i, 0.0)
+                give = min(to_dist, free)
+                if give > EPS:
+                    rec["k"].setdefault(jid, {})
+                    rec["k"][jid][i] = round(rec["k"][jid].get(i, 0.0) + give, 4)
+                    already[i] += give
+                    to_dist -= give
+                if to_dist <= EPS:
+                    break
+
+        return total_sell_borrowed
+
     # ------- Build unified release-ordered arrival list ----------------------
     sporadic_items = (
         sporadic_input.items() if isinstance(sporadic_input, dict)
@@ -813,9 +978,8 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                 continue
 
             sell_borrowed = 0.0
-            for tt in slots:
-                _resid, taken = _commit_min_sell(tt, w, jid)
-                sell_borrowed += taken
+            for run in _group_consecutive(slots):
+                sell_borrowed += _commit_run_min_sell(run, w, jid)
             acceptance_log.append({
                 "job_id": jid, "decision": "accept",
                 "arrival": r, "release": r, "deadline": d_abs,
@@ -856,9 +1020,8 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                 continue
 
             sell_borrowed = 0.0
-            for tt in slots:
-                _resid, taken = _commit_min_sell(tt, w, jid)
-                sell_borrowed += taken
+            for run in _group_consecutive(slots):
+                sell_borrowed += _commit_run_min_sell(run, w, jid)
             completion = max(slots)
             tardiness = max(0, completion - d_soft)
             decision = "scheduled_on_time" if on_time else "scheduled_late"
