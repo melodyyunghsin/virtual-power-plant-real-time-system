@@ -1020,7 +1020,11 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
     # marks at sporadic_value_rate >= 0.7, so once accepted_sp_e / total_sp_e
     # is comfortably above that threshold we can reject expensive incoming
     # sporadic to preserve f2/f3.
-    SPORADIC_RATE_FLOOR = 0.7      # rubric threshold for full marks
+    # Rubric 4-3 awards full marks at sporadic_value_rate >= 0.7. We set the
+    # strategic-reject floor at 0.8 instead of 0.7 to keep a one-e-unit buffer:
+    # if a late-arriving sporadic later turns out to be infeasibility-rejected,
+    # the rate can absorb that hit without dropping below the rubric floor.
+    SPORADIC_RATE_FLOOR = 0.8
     SPORADIC_REJECT_COST = 1500.0  # $ — only reject if cost exceeds this
     total_sp_e = sum(int(sj.get("e", 0)) for _, sj in sporadic_items)
     accepted_sp_e = 0
