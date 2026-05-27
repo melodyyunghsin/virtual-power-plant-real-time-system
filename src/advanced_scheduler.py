@@ -34,40 +34,10 @@ from scheduler import (
     load_inputs, parse_renewable_forecast, parse_renewable_actuals,
     parse_forecast_error_std, parse_price, parse_price_extended,
     expand_periodic, expand_aperiodic,
+    SlackAbsorber,
 )
 
-
-# ============================================================================
-# Helpers
-# ============================================================================
-
-def _planned_hours(plan, jid):
-    """Return list of hours where the plan has an allocation entry under jid.
-
-    The static schedule keys k by task_id (e.g., "p1"), not by instance id —
-    instances of the same task never overlap (d_j <= p_j), so each hour with
-    that key belongs to exactly one instance, which we can resolve by
-    matching against the instance window.
-    """
-    out = []
-    for slot in plan:
-        if jid in slot["k"]:
-            out.append(slot["t"])
-    return out
-
-
-def _instance_hours(plan, periodic_instance):
-    """Hours in the plan that belong to a specific periodic instance.
-
-    The plan keys k entries by task_id; multiple instances of the same task
-    share that key. We split them by checking against each instance's
-    [release, deadline] window.
-    """
-    task_id = periodic_instance["task_id"]
-    lo = periodic_instance["release"]
-    hi = periodic_instance["deadline"]
-    return [slot["t"] for slot in plan
-            if task_id in slot["k"] and lo <= slot["t"] <= hi]
+INF = float("inf")
 
 
 # ============================================================================
@@ -132,6 +102,12 @@ class AdvancedScheduler:
                 "last_P": float(gd.get("initial_energy", 0)),
             }
 
+        # Slack absorber operates on the rolling plan; same `self.plan`
+        # reference as below, so its slack_at sees post-commit P values.
+        self.absorber = SlackAbsorber(
+            self.plan, self.proc, self.pv_forecast, err_std=self.err_std
+        )
+
         # Tracking
         self.replans = 0
         self.replan_triggers = {"pv_deviation": 0, "sporadic_arrival": 0,
@@ -139,36 +115,47 @@ class AdvancedScheduler:
         self.last_periodic_replan = 0
         self.total_penalty = 0.0
         self.acceptance_log = []        # sporadic acceptance decisions
-        self.aperiodic_queue = []       # arrived, not yet placed
-        self.aperiodic_placements = {}  # jid -> {slots, decision, ...}
+        self.aperiodic_placements = {}  # jid -> {slots, decision, ...} — populated on arrival
         self.replan_failures = 0
         self.actual_schedule = []       # what really executed each hour
 
     # -- main loop ----------------------------------------------------------
     def run(self):
+        """Hour-by-hour rolling simulation.
+
+        At each hour, arrivals are placed immediately (Level-1 online_phase
+        semantics): sporadic via acceptance test (may reject), aperiodic via
+        force-placement (must execute, per C4). The rolling-horizon replan
+        then re-optimises dispatch given the now-frozen placements, fired by
+        PV-actual deviation, periodic refresh interval, or fresh arrivals.
+        """
         for t in range(1, H + 1):
             arriving_sp = [s for s in self.sporadic_input
                            if int(s.get("r", s.get("release", -1))) == t]
-            arriving_ap = [j for j in self.aperiodic_jobs if j["release"] == t]
+            arriving_ap = [j for j in self.aperiodic_jobs
+                           if j["release"] == t
+                           and j["id"] not in self.aperiodic_placements]
 
-            # newly-arrived aperiodic enter the queue
-            for aj in arriving_ap:
-                if aj["id"] not in self.aperiodic_placements:
-                    self.aperiodic_queue.append(aj)
-
-            # sporadic acceptance test (uses current plan + tentative replan)
-            accepted_now = []
+            # Sporadic first (hard deadline takes priority at ties).
+            sp_placed = False
             for sj in arriving_sp:
                 rec = self._process_sporadic(sj, t)
                 self.acceptance_log.append(rec)
                 if rec["decision"] == "accept":
-                    accepted_now.append(rec)
+                    sp_placed = True
 
-            # triggers
+            # Aperiodic — always force-placed.
+            ap_placed = False
+            for aj in arriving_ap:
+                rec = self._process_aperiodic(aj, t)
+                self.aperiodic_placements[aj["id"]] = rec
+                ap_placed = True
+
+            # Triggers for dispatch replan (placements are already committed).
             triggers = []
-            if accepted_now:
+            if sp_placed:
                 triggers.append("sporadic_arrival")
-            if arriving_ap:
+            if ap_placed:
                 triggers.append("aperiodic_arrival")
             if t - self.last_periodic_replan >= self.REPLAN_INTERVAL:
                 triggers.append("periodic_6h")
@@ -176,7 +163,7 @@ class AdvancedScheduler:
                 triggers.append("pv_deviation")
 
             if triggers:
-                ok = self._rolling_replan(t, accepted_now)
+                ok = self._rolling_replan(t)
                 if ok:
                     self.replans += 1
                     for tr in triggers:
@@ -188,10 +175,6 @@ class AdvancedScheduler:
 
             self._execute_hour(t)
 
-        # Any aperiodic that never got placed by a replan: try fitting them
-        # via slack on the final realised schedule.
-        self._final_aperiodic_sweep()
-
     # -- PV deviation -------------------------------------------------------
     def _pv_deviation(self, t):
         max_dev = 0.0
@@ -202,11 +185,216 @@ class AdvancedScheduler:
                 max_dev = max(max_dev, abs(ac - fc) / fc)
         return max_dev
 
-    # -- sporadic acceptance ------------------------------------------------
+    # -- slack / cost helpers (mirror scheduler.online_phase) ---------------
+    def _normal_slack(self, t):
+        """Slack from gen ramp + PV underuse only — sell intentionally
+        excluded so we minimise sell borrow."""
+        return self.absorber.slack_at(t) - self.plan[t - 1].get("sell", 0.0)
+
+    def _hour_cost(self, t, w):
+        """Estimated $ of sell borrow at hour t to satisfy w MWh. Returns INF
+        when even 100 % sell + gen + PV ramp cannot satisfy w."""
+        free = self._normal_slack(t)
+        avail = free + self.plan[t - 1].get("sell", 0.0)
+        if avail < w - EPS:
+            return INF
+        sell_needed = max(0.0, w - free)
+        return sell_needed * float(self.price_arr[t])
+
+    def _find_min_cost(self, r, end, e_len, w_need, preempt):
+        """Cheapest feasible placement of e_len hours of w_need MWh in [r, end].
+        Returns (sorted_slots, total_cost) or (None, INF) if infeasible."""
+        if r > end or end - r + 1 < e_len:
+            return None, INF
+        if preempt:
+            ranked = sorted(range(r, end + 1),
+                            key=lambda t: self._hour_cost(t, w_need))
+            chosen = ranked[:e_len]
+            total = sum(self._hour_cost(t, w_need) for t in chosen)
+            if total >= INF:
+                return None, INF
+            return sorted(chosen), total
+        best_window, best_cost = None, INF
+        for start in range(r, end - e_len + 2):
+            window = list(range(start, start + e_len))
+            total = sum(self._hour_cost(t, w_need) for t in window)
+            if total < best_cost:
+                best_cost, best_window = total, window
+        if best_cost >= INF:
+            return None, INF
+        return best_window, best_cost
+
+    def _group_consecutive(self, slots):
+        """Split sorted slot list into maximal runs of consecutive hours."""
+        if not slots:
+            return []
+        ss = sorted(slots)
+        runs = [[ss[0]]]
+        for s in ss[1:]:
+            if s == runs[-1][-1] + 1:
+                runs[-1].append(s)
+            else:
+                runs.append([s])
+        return runs
+
+    def _commit_min_sell(self, t, w, jid):
+        """Allocate w MWh at hour t into self.plan using gen+PV ramp first,
+        sell only for the residual. Returns (residual, sell_taken)."""
+        rec = self.plan[t - 1]
+        saved_sell = rec.get("sell", 0.0)
+        rec["sell"] = 0.0
+        residual = self.absorber.commit_at(t, w, jid)
+        rec["sell"] = saved_sell
+        if residual <= EPS:
+            return 0.0, 0.0
+        sell_take = min(residual, rec.get("sell", 0.0))
+        if sell_take <= EPS:
+            return residual, 0.0
+        rec["sell"] = round(rec.get("sell", 0.0) - sell_take, 4)
+        if "day_ahead_commit" in rec:
+            rec["day_ahead_commit"] = round(
+                max(0.0, rec["day_ahead_commit"] - sell_take), 4)
+        already = {i: 0.0 for i in rec.get("P", {})}
+        for k_ent in rec.get("k", {}).values():
+            for i, v in k_ent.items():
+                if i in already:
+                    already[i] += v
+        to_dist = sell_take
+        for i, p_val in sorted(rec.get("P", {}).items(),
+                               key=lambda kv: -kv[1]):
+            free = p_val - already.get(i, 0.0)
+            give = min(to_dist, free)
+            if give > EPS:
+                rec.setdefault("k", {}).setdefault(jid, {})
+                rec["k"][jid][i] = round(rec["k"][jid].get(i, 0.0) + give, 4)
+                already[i] += give
+                to_dist -= give
+            if to_dist <= EPS:
+                break
+        committed_sell = sell_take - to_dist
+        return residual - committed_sell, committed_sell
+
+    def _commit_run_min_sell(self, run, w, jid):
+        """Joint-LP commit over a consecutive run; falls back to single-hour
+        commit for runs of length 1. Returns total sell MWh borrowed."""
+        if len(run) == 1:
+            _, taken = self._commit_min_sell(run[0], w, jid)
+            return taken
+        T = run
+        prob = pulp.LpProblem(f"joint_{jid}_{T[0]}_{T[-1]}", pulp.LpMinimize)
+        dx = {g: {t: pulp.LpVariable(f"dx_{g}_{t}", lowBound=0)
+                  for t in T} for g in self.gen_ids}
+        dp = {pv: {t: pulp.LpVariable(f"dp_{pv}_{t}", lowBound=0)
+                   for t in T} for pv in self.pv_ids}
+        s_t = {t: pulp.LpVariable(f"s_{t}", lowBound=0) for t in T}
+        prob += pulp.lpSum(s_t[t] * float(self.price_arr[t]) for t in T)
+        for t in T:
+            prob += (pulp.lpSum(dx[g][t] for g in dx) +
+                     pulp.lpSum(dp[pv][t] for pv in dp) +
+                     s_t[t] == w), f"dem_{t}"
+            prob += s_t[t] <= self.plan[t - 1].get("sell", 0.0), f"sell_cap_{t}"
+        for g in self.gen_ids:
+            gd = self.gen_by_id[g]
+            ru, rd = float(gd["ramp_up_rate"]), float(gd["ramp_down_rate"])
+            out_max = float(gd["output_max"])
+            for idx, t in enumerate(T):
+                rec = self.plan[t - 1]
+                p_curr = rec["P"].get(g, 0.0)
+                if p_curr <= EPS:
+                    prob += dx[g][t] == 0, f"goff_{g}_{t}"
+                    continue
+                prob += p_curr + dx[g][t] <= out_max, f"omx_{g}_{t}"
+                # ramp_up at t (from t-1)
+                if idx == 0:
+                    p_prev = (self.plan[t - 2]["P"].get(g, 0.0) if t > 1
+                              else float(gd.get("initial_energy", 0)))
+                    prob += p_curr + dx[g][t] - p_prev <= ru, f"ru_{g}_{t}"
+                else:
+                    tp = T[idx - 1]
+                    p_prev_curr = self.plan[tp - 1]["P"].get(g, 0.0)
+                    prob += ((p_curr + dx[g][t]) - (p_prev_curr + dx[g][tp])
+                             <= ru), f"ru_{g}_{t}"
+                # ramp_down at t (toward t+1)
+                if idx == len(T) - 1:
+                    p_next = (self.plan[t]["P"].get(g, 0.0)
+                              if t < len(self.plan) else p_curr)
+                    prob += p_curr + dx[g][t] - p_next <= rd, f"rd_{g}_{t}"
+                else:
+                    tn = T[idx + 1]
+                    p_next_curr = self.plan[tn - 1]["P"].get(g, 0.0)
+                    prob += ((p_curr + dx[g][t]) - (p_next_curr + dx[g][tn])
+                             <= rd), f"rd_{g}_{t}"
+        for pv in self.pv_ids:
+            cap = self.pv_by_id[pv]["capacity"]
+            for t in T:
+                rec = self.plan[t - 1]
+                p_curr = rec["P"].get(pv, 0.0)
+                max_pv = cap * self.pv_forecast[pv][t] * self.absorber.robust
+                prob += p_curr + dp[pv][t] <= max_pv, f"pvmx_{pv}_{t}"
+        solver = pulp.PULP_CBC_CMD(msg=False)
+        prob.solve(solver)
+        if prob.status != pulp.LpStatusOptimal:
+            total = 0.0
+            for tt in T:
+                _, taken = self._commit_min_sell(tt, w, jid)
+                total += taken
+            return total
+
+        def _val(x):
+            v = pulp.value(x)
+            return float(v) if v is not None else 0.0
+
+        total_sell_borrowed = 0.0
+        for t in T:
+            rec = self.plan[t - 1]
+            for g in self.gen_ids:
+                inc = _val(dx[g][t])
+                if inc <= EPS:
+                    continue
+                rec["P"][g] = round(rec["P"].get(g, 0.0) + inc, 4)
+                rec.setdefault("k", {}).setdefault(jid, {})
+                rec["k"][jid][g] = round(rec["k"][jid].get(g, 0.0) + inc, 4)
+            for pv in self.pv_ids:
+                inc = _val(dp[pv][t])
+                if inc <= EPS:
+                    continue
+                rec["P"][pv] = round(rec["P"].get(pv, 0.0) + inc, 4)
+                rec.setdefault("k", {}).setdefault(jid, {})
+                rec["k"][jid][pv] = round(rec["k"][jid].get(pv, 0.0) + inc, 4)
+            sell_take = _val(s_t[t])
+            if sell_take <= EPS:
+                continue
+            total_sell_borrowed += sell_take
+            rec["sell"] = round(rec.get("sell", 0.0) - sell_take, 4)
+            if "day_ahead_commit" in rec:
+                rec["day_ahead_commit"] = round(
+                    max(0.0, rec["day_ahead_commit"] - sell_take), 4)
+            already = {i: 0.0 for i in rec.get("P", {})}
+            for k_ent in rec.get("k", {}).values():
+                for i, v in k_ent.items():
+                    if i in already:
+                        already[i] += v
+            to_dist = sell_take
+            for i, p_val in sorted(rec.get("P", {}).items(),
+                                   key=lambda kv: -kv[1]):
+                free = p_val - already.get(i, 0.0)
+                give = min(to_dist, free)
+                if give > EPS:
+                    rec.setdefault("k", {}).setdefault(jid, {})
+                    rec["k"][jid][i] = round(
+                        rec["k"][jid].get(i, 0.0) + give, 4)
+                    already[i] += give
+                    to_dist -= give
+                if to_dist <= EPS:
+                    break
+        return total_sell_borrowed
+
+    # -- sporadic / aperiodic placement (mirrors Level 1 online_phase) ------
     def _process_sporadic(self, sj, t_now):
-        """Cheap slack-based acceptance test on the current plan."""
+        """Online acceptance test: cheapest e-hour placement in
+        [max(release, t_now), hard_deadline] using gen+PV+sell. Accept and
+        commit immediately if feasible; otherwise reject."""
         sid = str(sj["id"])
-        # New format uses {"r","d",…}; older used {"release","hard_deadline"|"deadline",…}.
         r = int(sj.get("r", sj.get("release")))
         if "d" in sj:
             d = min(r + int(sj["d"]) - 1, H)
@@ -216,116 +404,94 @@ class AdvancedScheduler:
         w = float(sj["w"])
         preempt = int(sj.get("preempt", 1))
 
-        # Free capacity at hour t in current plan = P[i,t]-used[i,t] + sell[t]
-        # + on-generator headroom + PV headroom (capped at robust limit).
-        def _slack(tt):
-            slot = self.plan[tt - 1]
-            s = slot.get("sell", 0.0)
-            for g in self.gen_ids:
-                p_curr = slot["P"].get(g, 0.0)
-                if p_curr <= EPS:
-                    continue
-                gd = self.gen_by_id[g]
-                p_prev = (self.plan[tt - 2]["P"].get(g, 0.0)
-                          if tt > 1 else 0.0)
-                p_next = (self.plan[tt]["P"].get(g, 0.0)
-                          if tt < H else p_curr)
-                max_new = min(float(gd["output_max"]),
-                              p_prev + gd["ramp_up_rate"],
-                              p_next + gd["ramp_down_rate"])
-                s += max(0.0, max_new - p_curr)
-            for pv in self.pv_ids:
-                cap = self.pv_by_id[pv]["capacity"]
-                avail = cap * self.pv_forecast[pv][tt] * (1 - self.err_std)
-                s += max(0.0, avail - slot["P"].get(pv, 0.0))
-            return s
+        slots, cost = self._find_min_cost(max(r, t_now), min(d, H),
+                                          e, w, preempt)
+        if slots is None:
+            return {"job_id": sid, "decision": "reject",
+                    "arrival": r, "release": r, "deadline": d,
+                    "e": e, "w": w,
+                    "reason": (f"no feasible {e}h placement of {w}MW "
+                               f"in [{max(r, t_now)},{d}] even at 100% sell"),
+                    "caused_violation": False}
 
-        window = list(range(max(r, t_now), min(d, H) + 1))
-        if preempt == 0:
-            chosen = []
-            for start in range(window[0], window[-1] - e + 2):
-                blk = list(range(start, start + e))
-                if all(_slack(tt) >= w - EPS for tt in blk):
-                    chosen = blk
-                    break
-            if not chosen:
-                return {"job_id": sid, "decision": "reject", "arrival": r,
-                        "release": r, "deadline": d, "e": e, "w": w,
-                        "reason": f"no contiguous {e}h slot of >={w}MW in [{r},{d}]",
-                        "caused_violation": False}
-        else:
-            feas = [tt for tt in window if _slack(tt) >= w - EPS]
-            if len(feas) < e:
-                return {"job_id": sid, "decision": "reject", "arrival": r,
-                        "release": r, "deadline": d, "e": e, "w": w,
-                        "reason": f"only {len(feas)} feasible hours, need {e}",
-                        "caused_violation": False}
-            chosen = feas[:e]
-
-        return {"job_id": sid, "decision": "accept", "arrival": r,
-                "release": r, "deadline": d, "e": e, "w": w,
-                "slots": chosen, "preempt": preempt,
+        sell_borrowed = 0.0
+        for run in self._group_consecutive(slots):
+            sell_borrowed += self._commit_run_min_sell(run, w, sid)
+        return {"job_id": sid, "decision": "accept",
+                "arrival": r, "release": r, "deadline": d,
+                "e": e, "w": w,
+                "slots": slots, "preempt": preempt,
+                "sell_borrowed": round(sell_borrowed, 4),
+                "cost_estimate": round(cost, 2),
                 "caused_violation": False}
 
+    def _process_aperiodic(self, aj, t_now):
+        """Force-place an aperiodic job per spec C4 (must execute e hours by
+        H). Prefer cheapest on-time placement; fall back to cheapest late
+        placement in [release, H] only if on-time infeasible."""
+        jid = aj["id"]
+        r = max(aj["release"], t_now)
+        d_soft = aj["deadline"]
+        e = aj["e"]
+        w = aj["w"]
+        preempt = aj.get("preempt", 1)
+
+        slots, cost = self._find_min_cost(r, min(d_soft, H), e, w, preempt)
+        on_time = slots is not None
+        if not on_time:
+            slots, cost = self._find_min_cost(r, H, e, w, preempt)
+
+        if slots is None:
+            return {"job_id": jid, "decision": "infeasible",
+                    "release": aj["release"], "soft_deadline": d_soft,
+                    "e": e, "w": w, "slots": [],
+                    "completion": None, "tardiness": None,
+                    "missed_soft_deadline": True,
+                    "via_sell_borrow": False,
+                    "reason": (f"no feasible {e}h placement of {w}MW "
+                               f"in [{r},{H}] even at 100% sell")}
+
+        sell_borrowed = 0.0
+        for run in self._group_consecutive(slots):
+            sell_borrowed += self._commit_run_min_sell(run, w, jid)
+        completion = max(slots)
+        tardiness = max(0, completion - d_soft)
+        decision = "scheduled_on_time" if on_time else "scheduled_late"
+        return {"job_id": jid, "decision": decision,
+                "release": aj["release"], "soft_deadline": d_soft,
+                "e": e, "w": w, "slots": slots,
+                "completion": completion, "tardiness": tardiness,
+                "missed_soft_deadline": (not on_time),
+                "via_sell_borrow": (sell_borrowed > EPS),
+                "sell_borrowed": round(sell_borrowed, 4),
+                "cost_estimate": round(cost, 2)}
+
     # -- rolling replan -----------------------------------------------------
-    def _rolling_replan(self, t_now, newly_accepted_sporadic):
+    def _rolling_replan(self, t_now):
         """Re-optimise dispatch over [t_now, t_end].
 
-        Periodic / previously-accepted sporadic placements inside the window
-        are frozen (their k allocations are FIXED). The ILP redecides:
+        All sporadic / aperiodic placements are committed at arrival time
+        (Level-1 semantics), so this replan only redecides:
           - thermal P, on/off, ramp;
           - battery chg / dis / soc;
-          - renewable P (bounded by pv_actual for t_now, pv_forecast·0.92 else);
+          - renewable P (bounded by pv_actual for t_now, pv_forecast·robust else);
           - sell[t] and (penalty / over-revenue) decomposition;
-          - placement (x, k) of newly-accepted sporadic + queued aperiodic.
-        Returns True iff solve succeeded and plan was updated.
+          - per-(job, hour) processor split K[jid][i][t] (under the FROZEN
+            demand w[jid][t] established at commit time).
+        Returns True iff solve succeeded and the plan was updated.
         """
         t_end = min(t_now + self.WINDOW - 1, H)
         T = list(range(t_now, t_end + 1))
 
-        # ------- collect new jobs to place (sporadic just accepted +
-        #          queued aperiodic) — built first so we know which jids
-        #          to exclude from frozen demand.
-        new_jobs = []
-        for rec in newly_accepted_sporadic:
-            new_jobs.append({
-                "id":       rec["job_id"],
-                "release":  max(rec["release"], t_now),
-                "deadline": min(rec["deadline"], t_end),
-                "e":        rec["e"],
-                "w":        rec["w"],
-                "preempt":  rec.get("preempt", 1),
-                "kind":     "sporadic",
-            })
-        for aj in list(self.aperiodic_queue):
-            r = aj["release"]
-            d = aj["deadline"]
-            if r > t_end or d < t_now:
-                continue
-            new_jobs.append({
-                "id":       aj["id"],
-                "release":  max(r, t_now),
-                "deadline": min(d, t_end),
-                "e":        aj["e"],
-                "w":        aj["w"],
-                "preempt":  aj.get("preempt", 1),
-                "kind":     "aperiodic",
-            })
-        new_job_ids = {j["id"] for j in new_jobs}
-        queued_ap_ids = {aj["id"] for aj in self.aperiodic_queue}
-
-        # ------- collect frozen demand (periodic + already-placed jobs) -----
-        # Skip any jid that the replan is going to re-decide (queued aperiodic
-        # or newly-accepted sporadic). That avoids double-counting the same
-        # demand both as frozen and as a new placement.
+        # ------- collect frozen demand (every committed job in the window) --
+        # All non-charging jobs in the current plan are treated as frozen —
+        # no new-job placement happens inside the replan anymore.
         frozen_demand = []     # list of (jid, t, w)
         for slot in self.plan:
             if slot["t"] not in T:
                 continue
             for jid, alloc in slot["k"].items():
                 if jid.endswith("_chg"):
-                    continue
-                if jid in new_job_ids or jid in queued_ap_ids:
                     continue
                 total_w = sum(alloc.values())
                 if total_w > EPS:
@@ -357,35 +523,6 @@ class AdvancedScheduler:
                 K_frozen[jid][t][i] = pulp.LpVariable(
                     f"kf_{jid}_{i}_{t}", lowBound=0)
 
-        # K + x for new jobs (sporadic + aperiodic)
-        x = {}
-        y = {}
-        miss = {}
-        K_new = {}
-        for j in new_jobs:
-            jid = j["id"]
-            if j["release"] > j["deadline"]:
-                # No feasible hour in window; if aperiodic, force miss
-                if j["kind"] == "aperiodic":
-                    miss[jid] = pulp.LpVariable(f"miss_{jid}", cat="Binary")
-                    prob += miss[jid] == 1
-                continue
-            x[jid] = {t: pulp.LpVariable(f"x_{jid}_{t}", cat="Binary")
-                      for t in range(j["release"], j["deadline"] + 1)}
-            if j["preempt"] == 0:
-                starts = list(range(j["release"],
-                                    j["deadline"] - j["e"] + 2))
-                y[jid] = {s: pulp.LpVariable(f"y_{jid}_{s}", cat="Binary")
-                          for s in starts}
-            if j["kind"] == "aperiodic":
-                miss[jid] = pulp.LpVariable(f"miss_{jid}", cat="Binary")
-            K_new[jid] = {}
-            for i in self.proc_ids:
-                K_new[jid][i] = {
-                    t: pulp.LpVariable(f"kn_{jid}_{i}_{t}", lowBound=0)
-                    for t in x[jid]
-                }
-
         # Kchg[bat_chg][i][t]
         Kchg = {}
         for cj in self.chg_jobs:
@@ -396,7 +533,8 @@ class AdvancedScheduler:
                     f"kc_{cid}_{i}_{t}", lowBound=0) for t in T}
 
         # ------- objective -------------------------------------------------
-        f1 = pulp.lpSum(miss.values()) if miss else 0
+        # Sporadic/aperiodic placements are frozen — no miss variables here,
+        # so f1 = 0 in the replan. f2 and f3 still drive dispatch optimisation.
         f2 = pulp.lpSum(
             self.gen_by_id[g]["cost_fixed"] * u[g][t]
             + self.gen_by_id[g]["cost_variable"] * P[g][t]
@@ -407,9 +545,8 @@ class AdvancedScheduler:
         )
         # Revenue model: full sell at day-ahead price + bonus at realtime
         # price for the portion above commit, less penalty for shortfall.
-        # We cap rt_factor at 1.0 in the planner's coefficient — otherwise
-        # the LP is unbounded when rt > p_da (s_over has no upper bound).
-        # Realised revenue computed at execution uses the true rt_factor.
+        # rt_factor coefficient capped at 1.0 to keep the LP bounded; realised
+        # revenue at execution uses the true rt_factor.
         f3 = pulp.lpSum(
             -self.price_arr[t] * sell[t]
             + self.price_arr[t] * (1.0 - min(self.rt_factors[t], 1.0))
@@ -417,37 +554,12 @@ class AdvancedScheduler:
             + self.cancel_rate * self.price_arr[t] * s_under[t]
             for t in T
         )
-        prob += ALPHA * f1 + f2 + f3, "TotalCost"
+        prob += f2 + f3, "TotalCost"
 
         # ------- frozen-demand satisfaction --------------------------------
         for jid, t, w in frozen_demand:
             prob += pulp.lpSum(K_frozen[jid][t][i] for i in self.proc_ids) == w, \
                     f"fdem_{jid}_{t}"
-
-        # ------- new-job execution / demand --------------------------------
-        for j in new_jobs:
-            jid = j["id"]
-            if jid not in x:
-                continue
-            e = j["e"]
-            if j["kind"] == "aperiodic":
-                prob += pulp.lpSum(x[jid].values()) == e * (1 - miss[jid]), \
-                        f"jE_{jid}"
-            else:
-                prob += pulp.lpSum(x[jid].values()) == e, f"jE_{jid}"
-            if j["preempt"] == 0:
-                if j["kind"] == "aperiodic":
-                    prob += pulp.lpSum(y[jid].values()) == 1 - miss[jid], \
-                            f"oneSt_{jid}"
-                else:
-                    prob += pulp.lpSum(y[jid].values()) == 1, f"oneSt_{jid}"
-                for t in x[jid]:
-                    cov = [s for s in y[jid] if s <= t <= s + e - 1]
-                    prob += x[jid][t] == pulp.lpSum(y[jid][s] for s in cov), \
-                            f"lnk_{jid}_{t}"
-            for t in x[jid]:
-                prob += pulp.lpSum(K_new[jid][i][t] for i in self.proc_ids) \
-                        == j["w"] * x[jid][t], f"dem_{jid}_{t}"
 
         # ------- battery charging demand ----------------------------------
         for cj in self.chg_jobs:
@@ -542,14 +654,11 @@ class AdvancedScheduler:
                     K_frozen[jid][t][i]
                     for jid in K_frozen if t in K_frozen[jid]
                 )
-                to_njobs = pulp.lpSum(
-                    K_new[jid][i][t] for jid in K_new if t in K_new[jid][i]
-                )
                 to_chg = pulp.lpSum(
                     Kchg[cj["id"]][i][t]
                     for cj in self.chg_jobs if i in Kchg[cj["id"]]
                 )
-                prob += P[i][t] == to_fjobs + to_njobs + to_chg \
+                prob += P[i][t] == to_fjobs + to_chg \
                         + sell_share[i][t], f"bal_{i}_{t}"
 
         # ------- sell composition + over/under linearisation ---------------
@@ -576,8 +685,8 @@ class AdvancedScheduler:
             return float(x) if x is not None else default
 
         # ------- write plan in window -------------------------------------
-        sporadic_placed = set()
-        aperiodic_resolved = set()
+        # Job placements are frozen — only dispatch numbers (P, k splits,
+        # sell, soc, battery k) are refreshed from the LP solution.
         for t in T:
             slot = self.plan[t - 1]
             new_P = {}
@@ -597,23 +706,6 @@ class AdvancedScheduler:
                             entry[i] = round(kv, 4)
                     if entry:
                         new_k[jid] = entry
-            for jid in K_new:
-                if t not in K_new[jid][self.proc_ids[0]]:
-                    continue
-                if _v(x[jid][t]) <= 0.5:
-                    continue
-                entry = {}
-                for i in self.proc_ids:
-                    kv = _v(K_new[jid][i][t])
-                    if kv > EPS:
-                        entry[i] = round(kv, 4)
-                if entry:
-                    new_k[jid] = entry
-                # Detect category
-                if any(jid == r["job_id"] for r in newly_accepted_sporadic):
-                    sporadic_placed.add(jid)
-                else:
-                    aperiodic_resolved.add(jid)
             for cj in self.chg_jobs:
                 cid = cj["id"]
                 if _v(chg[cj["battery"]][t]) > EPS:
@@ -627,48 +719,6 @@ class AdvancedScheduler:
             slot["k"] = new_k
             slot["sell"] = round(_v(sell[t]), 4)
             slot["soc"] = {b: round(_v(soc[b][t]), 4) for b in self.bat_ids}
-
-        # Remove placed aperiodic from queue; record their placement
-        for jid in aperiodic_resolved:
-            self.aperiodic_queue = [aj for aj in self.aperiodic_queue
-                                    if aj["id"] != jid]
-            # Build placement record
-            hours = []
-            for t in T:
-                if jid in self.plan[t - 1]["k"]:
-                    hours.append(t)
-            if hours:
-                d_orig = next(j["deadline"] for j in self.aperiodic_jobs
-                              if j["id"] == jid)
-                e_orig = next(j["e"] for j in self.aperiodic_jobs
-                              if j["id"] == jid)
-                w_orig = next(j["w"] for j in self.aperiodic_jobs
-                              if j["id"] == jid)
-                completion = max(hours)
-                tardiness = max(0, completion - d_orig)
-                self.aperiodic_placements[jid] = {
-                    "job_id": jid,
-                    "decision": ("scheduled_on_time" if tardiness == 0
-                                 else "scheduled_late"),
-                    "release": next(j["release"] for j in self.aperiodic_jobs
-                                    if j["id"] == jid),
-                    "soft_deadline": d_orig,
-                    "e": e_orig, "w": w_orig,
-                    "slots": hours, "completion": completion,
-                    "tardiness": tardiness,
-                    "missed_soft_deadline": (tardiness > 0),
-                    "via_sell_borrow": False,
-                }
-
-        # Aperiodic that were "missed" by the ILP — flag and pull from queue
-        for jid, mvar in miss.items():
-            if _v(mvar) > 0.5:
-                # job not placed; only flag if it was an aperiodic in queue
-                j_obj = next((j for j in self.aperiodic_jobs
-                              if j["id"] == jid), None)
-                if j_obj and jid not in self.aperiodic_placements:
-                    # leave in queue — final sweep may rescue it
-                    pass
 
         return True
 
@@ -747,75 +797,6 @@ class AdvancedScheduler:
         slot["pv_actual"] = {pv: round(self.pv_actual[pv][t], 4)
                              for pv in self.pv_ids}
         self.actual_schedule.append(slot)
-
-    # -- final aperiodic sweep ---------------------------------------------
-    def _final_aperiodic_sweep(self):
-        """Best-effort placement for aperiodic jobs that never got placed.
-
-        Uses raw slack on the realised schedule (no replan). Mirrors the
-        static phase3 logic at a smaller scale.
-        """
-        for aj in self.aperiodic_queue:
-            jid = aj["id"]
-            if jid in self.aperiodic_placements:
-                continue
-            r, d, e, w = aj["release"], aj["deadline"], aj["e"], aj["w"]
-
-            def _slack(tt):
-                slot = self.actual_schedule[tt - 1]
-                s = slot.get("sell", 0.0)
-                for g in self.gen_ids:
-                    p_curr = slot["P"].get(g, 0.0)
-                    if p_curr <= EPS:
-                        continue
-                    gd = self.gen_by_id[g]
-                    p_prev = (self.actual_schedule[tt - 2]["P"].get(g, 0.0)
-                              if tt > 1 else 0.0)
-                    p_next = (self.actual_schedule[tt]["P"].get(g, 0.0)
-                              if tt < len(self.actual_schedule) else p_curr)
-                    max_new = min(float(gd["output_max"]),
-                                  p_prev + gd["ramp_up_rate"],
-                                  p_next + gd["ramp_down_rate"])
-                    s += max(0.0, max_new - p_curr)
-                for pv in self.pv_ids:
-                    avail = (self.pv_by_id[pv]["capacity"]
-                             * self.pv_actual[pv][tt])
-                    s += max(0.0, avail - slot["P"].get(pv, 0.0))
-                return s
-
-            feasible = [tt for tt in range(max(r, 1), H + 1)
-                        if _slack(tt) >= w - EPS]
-            if len(feasible) >= e:
-                slots = feasible[:e]
-                # Apply: reduce sell, attribute to job
-                for tt in slots:
-                    slot = self.actual_schedule[tt - 1]
-                    use = min(w, slot.get("sell", 0.0))
-                    slot["sell"] = round(slot.get("sell", 0.0) - use, 4)
-                    # any residual would mean slack came from gen/PV ramp;
-                    # we don't reshape P here, treat as off-balance correction
-                completion = slots[-1]
-                tardy = max(0, completion - d)
-                self.aperiodic_placements[jid] = {
-                    "job_id": jid,
-                    "decision": ("scheduled_on_time" if tardy == 0
-                                 else "scheduled_late"),
-                    "release": r, "soft_deadline": d, "e": e, "w": w,
-                    "slots": slots, "completion": completion,
-                    "tardiness": tardy,
-                    "missed_soft_deadline": (tardy > 0),
-                    "via_sell_borrow": True,
-                }
-            else:
-                self.aperiodic_placements[jid] = {
-                    "job_id": jid, "decision": "skipped",
-                    "release": r, "soft_deadline": d, "e": e, "w": w,
-                    "slots": [], "completion": None, "tardiness": None,
-                    "missed_soft_deadline": True,
-                    "via_sell_borrow": False,
-                    "reason": f"no slack window of {e}h with >={w}MW in [{r},{H}]",
-                }
-        self.aperiodic_queue.clear()
 
     # -- export ------------------------------------------------------------
     def export_results(self, static_eval_path=None):
