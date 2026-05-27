@@ -557,15 +557,15 @@ class SlackAbsorber:
                 continue
             p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
                       else float(gd.get("initial_energy", 0))) # 前一小時的輸出
-            # ramp_down boundary removed in slack_at() intentionally: this
-            # function is used for feasibility screening only. The actual
-            # commit is done by commit_at() (which retains ramp_down guard)
-            # or _commit_run_min_sell LP (which enforces ramp across the run).
-            # Removing it here allows _find_min_cost to consider hours that
-            # are genuinely feasible when handled by the multi-hour LP path.
+            # ramp_down boundary removed intentionally; cascade handles
+            # downstream ramp_down propagation. _cascade_safe_max is included
+            # so slack_at correctly reflects the UT/DT-limited headroom —
+            # preventing _find_min_cost from selecting hours that commit_at
+            # cannot actually deliver due to downstream blocking OFF hours.
             max_new = min(
                 float(gd["output_max"]),
                 p_prev + gd["ramp_up_rate"],
+                self._cascade_safe_max(g, t),
             )
             s += max(0.0, max_new - p_curr) # 發電機的剩餘可用產能
         for pv in self.pv_ids:
@@ -618,12 +618,12 @@ class SlackAbsorber:
                 p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
                           else float(gd.get("initial_energy", 0)))
                 # ramp_down bound removed: _cascade_sell propagates any raise
-                # to subsequent ON-hours so ramp_down feasibility is maintained
-                # there. Raises blocked by an imminent OFF hour are physically
-                # irrecoverable; _cascade_sell stops at the OFF hour boundary.
+                # to subsequent hours; if an OFF hour must be started to maintain
+                # ramp_down, it is only turned ON when UT and DT guards pass.
                 max_new = min(
                     float(gd["output_max"]),
                     p_prev + gd["ramp_up_rate"],
+                    self._cascade_safe_max(g, t),
                 )
                 avail = max_new - p_curr
                 if avail <= EPS:
@@ -660,12 +660,86 @@ class SlackAbsorber:
             rec["k"][target_jid] = clean
         return remaining
 
+    def _ut_ok(self, g, t_on, startup_p):
+        """Return True if starting g at hour t_on with startup_p satisfies UT.
+        Walks forward UT-1 additional hours. A subsequent hour counts as ON only
+        when Phase 1 already has it ON (p > 0). Phase-1-OFF hours are NOT counted
+        even if cascade ramp_down would force them ON, because cascade at those
+        hours is itself subject to UT/DT guards that may block it — being
+        conservative here avoids recursive dependency.
+        """
+        gd = self.gens[g]
+        ut = int(gd.get("min_up_time", 1))
+        rd = float(gd["ramp_down_rate"])
+        sim_p = startup_p
+        for offset in range(1, ut):
+            th = t_on + offset
+            if th > H:
+                return False
+            p_th = self.schedule[th - 1]["P"].get(g, 0.0)
+            min_needed = sim_p - rd
+            if p_th > EPS:
+                sim_p = max(p_th, min_needed)
+            else:
+                return False  # Phase-1-OFF hour — conservative: does not count
+        return True
+
+    def _cascade_safe_max(self, g, t):
+        """Return the maximum P that can safely be set at hour t for generator g.
+        Scans forward from t+1 for the first Phase-1-OFF hour whose cascade startup
+        would be UT/DT-blocked (using _ut_ok with out_min as conservative startup).
+        The limit is rd × steps-to-that-hour, ensuring the ramp_down chain can
+        reach 0 at the blocking hour without needing an illegal startup.
+        Returns out_max when no blocking hour is found within the horizon.
+        """
+        gd = self.gens[g]
+        rd = float(gd["ramp_down_rate"])
+        out_max = float(gd["output_max"])
+        out_min = float(gd.get("output_min", 0.0))
+        for th in range(t + 1, H + 1):
+            p_th = self.schedule[th - 1]["P"].get(g, 0.0)
+            if p_th <= EPS and not self._ut_ok(g, th, out_min):
+                return min(out_max, rd * (th - t))
+        return out_max
+
+    def _dt_ok(self, g, t_on, startup_p):
+        """Return True if starting g at hour t_on does not create an OFF gap
+        shorter than DT before Phase 1's next ON restart.
+        Simulates the combined cascade+Phase1 ON run to find where it ends,
+        then measures the OFF gap to the next Phase 1 ON hour.
+        """
+        gd = self.gens[g]
+        dt = int(gd.get("min_down_time", 1))
+        rd = float(gd["ramp_down_rate"])
+        out_min = float(gd.get("output_min", 0.0))
+        out_max = float(gd["output_max"])
+        sim_p = startup_p
+        t_off = None
+        for th in range(t_on + 1, H + 1):
+            p_th = self.schedule[th - 1]["P"].get(g, 0.0)
+            min_needed = sim_p - rd
+            if p_th > EPS:
+                sim_p = max(p_th, min_needed)
+            elif min_needed > EPS:
+                sim_p = min(out_max, max(out_min, min_needed))
+            else:
+                t_off = th  # first OFF hour after the cascade/Phase1 ON run
+                break
+        if t_off is None:
+            return True  # generator stays ON through H — no DT issue
+        for th in range(t_off, H + 1):
+            if self.schedule[th - 1]["P"].get(g, 0.0) > EPS:
+                off_len = th - t_off
+                return off_len >= dt
+        return True  # no Phase 1 restart found — no DT issue
+
     def _cascade_sell(self, g, t_raised, new_p):
         """After raising P[g, t_raised] to new_p, propagate the increase
         to subsequent hours via sell to maintain ramp_down feasibility.
-        When a scheduled-OFF hour is reached the generator is turned ON
-        (output attributed to sell) so the ramp_down chain can continue.
-        Stops when the ramp_down requirement drops to zero or is already met."""
+        When a scheduled-OFF hour is reached the generator is turned ON only
+        if doing so satisfies UT (min_up_time) and DT (min_down_time) guards.
+        Stops when the ramp_down requirement drops to zero, is already met,
+        or a UT/DT-safe startup is impossible."""
         gd = self.gens[g]
         rd = float(gd["ramp_down_rate"])
         out_max = float(gd["output_max"])
@@ -680,8 +754,15 @@ class SlackAbsorber:
             p_curr = rec["P"].get(g, 0.0)
             if p_curr >= min_needed - EPS:
                 break  # already ramp_down-feasible at this hour
-            # Raise generator; for an OFF hour enforce output_min floor
-            new_p_t = min(out_max, max(out_min if p_curr <= EPS else 0.0, min_needed))
+            is_off = p_curr <= EPS
+            # UT/DT guard: only applies when starting up a previously-OFF hour
+            if is_off and (not self._ut_ok(g, t, out_min) or
+                           not self._dt_ok(g, t, out_min)):
+                break  # startup would violate UT or DT — abort cascade
+            # Cap to cascade-safe max: the ramp_down chain must reach 0 by the
+            # first future UT/DT-blocking OFF hour; _cascade_safe_max gives that limit.
+            safe = self._cascade_safe_max(g, t)
+            new_p_t = min(out_max, max(out_min if is_off else 0.0, min_needed), safe)
             extra = new_p_t - p_curr
             if extra <= EPS:
                 break
@@ -891,7 +972,12 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                 # T_last to subsequent ON-hours via sell, maintaining
                 # ramp_down feasibility outside the run window.
                 if idx == len(T) - 1:
-                    pass  # cascade handles post-run ramp_down
+                    # Cap T_last to the cascade-safe maximum so that the
+                    # ramp_down chain after the run window stays within limits
+                    # imposed by UT/DT guards on subsequent OFF-hour startups.
+                    safe = absorber._cascade_safe_max(g, t)
+                    if safe < out_max - EPS:
+                        prob += (p_curr + dx[g][t] <= safe), f"rd_last_{g}_{t}"
                 else:
                     tn = T[idx + 1]
                     p_next_curr = schedule[tn - 1]["P"].get(g, 0.0)

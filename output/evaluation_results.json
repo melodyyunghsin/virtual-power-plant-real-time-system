@@ -3,8 +3,8 @@
   "soft_deadline_miss_rate": 0.0,
   "average_tardiness": 0.0,
   "max_tardiness": 0,
-  "average_response_time": 4.9483,
-  "max_response_time": 20,
+  "average_response_time": 5.5088,
+  "max_response_time": 17,
   "completion_time_jitter": {
     "p1": 3.3541,
     "p2": 0.0,
@@ -18,14 +18,14 @@
   },
   "acceptance_test": {
     "total": 5,
-    "accepted": 5,
-    "rejected": 0
+    "accepted": 4,
+    "rejected": 1
   },
-  "sporadic_value_rate": 1.0,
+  "sporadic_value_rate": 0.9,
   "post_acceptance_violation_rate": 0.0,
-  "generator_cost": 292940.0,
-  "market_revenue": 349940.45,
-  "objective_value": -57000.45,
+  "generator_cost": 291120.0,
+  "market_revenue": 348671.45,
+  "objective_value": -57551.45,
   "relaxed_assumptions": {
     "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
     "charge_efficiency": 0.95,
@@ -36,10 +36,10 @@
     "soc_dep_discharge_binding_hours": 31,
     "market_mechanism": {
       "cancellation_penalty_rate": 0.3,
-      "total_day_ahead_commit_MWh": 4066.7548,
-      "total_realtime_sell_MWh": 4066.7548,
+      "total_day_ahead_commit_MWh": 4042.7548,
+      "total_realtime_sell_MWh": 4042.7548,
       "total_cancellation_penalty": 0.0,
-      "net_market_revenue": 349940.45,
+      "net_market_revenue": 348671.45,
       "realtime_price_stats": {
         "min_factor": 0.8,
         "max_factor": 1.39,
