@@ -484,8 +484,10 @@ class SlackAbsorber:
         self.pv_forecast = pv_forecast
         self.gens        = {g["generator_id"]: g for g in proc["generator"]}
         self.pvs         = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
+        self.bats        = {b["storage_id"]: b for b in proc["storage"]}
         self.gen_ids     = list(self.gens)
         self.pv_ids      = list(self.pvs)
+        self.bat_ids     = list(self.bats)
 
     def slack_at(self, t):
         rec = self.schedule[t - 1]
@@ -626,6 +628,61 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
     Returns (acceptance_log, aperiodic_log).
     """
     absorber = SlackAbsorber(schedule, proc, pv_forecast)
+    H_local = len(schedule)
+
+    def _battery_avail(t, b):
+        """Max additional MWh of discharge from battery `b` at hour `t`,
+        respecting:
+          - C14   new_dis ≤ discharge_max
+          - C19   not currently charging at hour t (mutex)
+          - C17   post-shift SOC[s] ≥ soc_min for ALL s ≥ t
+                  (discharging more at t shifts the entire SOC trajectory
+                   from t onward down by Δ in L1 ideal dynamics)
+        """
+        bd = absorber.bats[b]
+        rec_t = schedule[t - 1]
+        # C19: skip if battery is being charged at this hour
+        chg_here = sum(rec_t.get("k", {}).get(f"{b}_chg", {}).values())
+        if chg_here > EPS:
+            return 0.0
+        # C14 headroom
+        current_dis = rec_t["P"].get(b, 0.0)
+        avail_by_cap = float(bd["discharge_max"]) - current_dis
+        if avail_by_cap <= EPS:
+            return 0.0
+        # C17 SOC chain — the tightest future SOC determines the shift limit
+        soc_min = float(bd["soc_min"])
+        min_room = INF
+        for s in range(t, H_local + 1):
+            soc_s = schedule[s - 1].get("soc", {}).get(b, soc_min)
+            min_room = min(min_room, soc_s - soc_min)
+        return max(0.0, min(avail_by_cap, min_room))
+
+    def _commit_battery(t, w_needed, jid):
+        """Discharge available batteries at hour t to satisfy up to
+        `w_needed` MWh of demand for `jid`. Cascades the SOC reduction
+        through all hours s ≥ t so the schedule stays C17-feasible.
+        Returns the total MWh actually committed."""
+        committed = 0.0
+        for b in absorber.bat_ids:
+            if committed >= w_needed - EPS:
+                break
+            avail = _battery_avail(t, b)
+            take = min(w_needed - committed, avail)
+            if take <= EPS:
+                continue
+            rec = schedule[t - 1]
+            rec["P"][b] = round(rec["P"].get(b, 0.0) + take, 4)
+            rec.setdefault("k", {}).setdefault(jid, {})
+            rec["k"][jid][b] = round(rec["k"][jid].get(b, 0.0) + take, 4)
+            # Cascade SOC reduction across the whole remaining horizon
+            for s in range(t, H_local + 1):
+                soc_s = schedule[s - 1].get("soc", {}).get(b, 0.0)
+                schedule[s - 1].setdefault("soc", {})[b] = round(
+                    soc_s - take, 4
+                )
+            committed += take
+        return committed
 
     def _hour_cost(t, w):
         """Marginal $ cost of placing w MWh at hour t — sell loss + cheapest
@@ -644,6 +701,9 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                          * absorber.pv_forecast[pv][t])
             curr = rec["P"].get(pv, 0.0)
             pv_avail += max(0.0, cap_avail - curr)
+        # Battery additional discharge — free in L1 (no aging cost), bounded
+        # by C14 / C17 / C19 via `_battery_avail`.
+        bat_avail = sum(_battery_avail(t, b) for b in absorber.bat_ids)
         # Gen headroom and its marginal $/MWh, across all on generators.
         gen_options = []   # list of (avail_mw, cost_var)
         for g in absorber.gen_ids:
@@ -662,7 +722,8 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
             if gh > EPS:
                 gen_options.append((gh, float(gd["cost_variable"])))
         # Feasibility check
-        if pv_avail + sum(g[0] for g in gen_options) + avail_sell < w - EPS:
+        if (pv_avail + bat_avail + sum(g[0] for g in gen_options)
+                + avail_sell < w - EPS):
             return INF
         remaining = w
         # Step 1: PV (free)
@@ -670,7 +731,12 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         remaining -= take
         if remaining <= EPS:
             return 0.0
-        # Step 2: pick gen vs sell per-MWh by cheaper rate.
+        # Step 2: battery (free in L1)
+        take = min(remaining, bat_avail)
+        remaining -= take
+        if remaining <= EPS:
+            return 0.0
+        # Step 3: pick gen vs sell per-MWh by cheaper rate.
         p_t = float(price_arr[t]) if price_arr is not None else 0.0
         sources = []   # (avail, $/MWh)
         sources.extend(gen_options)
@@ -711,8 +777,11 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         return best_window, best_cost
 
     def _commit_min_sell(t, w, jid):
-        """Allocate w MWh at hour t, using gen + PV ramp first and sell only
-        for the unmet residual. Returns (residual, sell_taken).
+        """Allocate w MWh at hour t. Source order matches cost order:
+          1. Gen + PV ramp (via commit_at with sell hidden)
+          2. Battery discharge (free in L1, SOC-chain feasible)
+          3. Sell borrow (lost revenue)
+        Returns (residual, sell_taken).
         """
         rec = schedule[t - 1]
         # Step 1: gen + PV (sell hidden so commit_at skips Step 1).
@@ -722,7 +791,12 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         rec["sell"] = saved_sell
         if residual <= EPS:
             return 0.0, 0.0
-        # Step 2: take from sell for the residual.
+        # Step 2: battery (also free in L1).
+        bat_committed = _commit_battery(t, residual, jid)
+        residual -= bat_committed
+        if residual <= EPS:
+            return 0.0, 0.0
+        # Step 3: take from sell for the residual.
         sell_take = min(residual, rec["sell"])
         if sell_take <= EPS:
             return residual, 0.0
