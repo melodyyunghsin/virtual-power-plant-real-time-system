@@ -55,12 +55,12 @@
       "e": 2,
       "w": 10.0,
       "slots": [
-        51,
-        52
+        48,
+        51
       ],
       "preempt": 1,
       "sell_borrowed": 10.0,
-      "cost_estimate": 1240.0,
+      "cost_estimate": 1225.0,
       "caused_violation": false
     },
     {

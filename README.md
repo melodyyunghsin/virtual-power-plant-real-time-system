@@ -53,7 +53,14 @@ python3 src/evaluator.py
 python3 src/advanced_scheduler.py
 # 產出：output/schedule_result_advanced.json
 #       output/acceptance_test_log_advanced.json
-#       output/evaluation_results_advanced.json
+#       output/evaluation_results_advanced.json  (此版本為動態排程器即時計算，欄位較精簡)
+
+# Step 5: Level 2 完整效能評估 (補齊 spec 必填欄位)
+python3 src/evaluator_advanced.py
+# 產出：output/evaluation_results_advanced.json  (覆寫 Step 4 版本，補上
+#       average_tardiness / max_tardiness / average_response_time /
+#       max_response_time / completion_time_jitter /
+#       post_acceptance_violation_rate / relaxed_assumptions 等欄位)
 ```
 
 ### 驗證程式 (Optional)
@@ -136,7 +143,23 @@ python3 src/verifier_advanced.py
 - 滾動 ILP 只重新優化 dispatch (P, sell, gen on/off, battery)；工作的時段分配自到達時即鎖定。
 - 每小時結算時若實際 sell 低於 day-ahead 承諾，累積取消售電 penalty。
 
-### 4.5 src/verifier.py / verifier_advanced.py — 限制式驗證
+### 4.5 src/evaluator_advanced.py — Level 2 完整效能評估
+
+`advanced_scheduler.py` 在動態排程結束時會輸出一個精簡版的 `evaluation_results_advanced.json`（僅包含 miss rate、generator_cost、market_revenue、cancellation_penalty、objective_value、vs_static 等核心欄位）。為符合 spec Appendix H 對評估指標完整性的要求，請於 Step 4 之後再執行本程式，覆寫為含全部欄位的版本。
+
+| 輸入 | 說明 |
+| --- | --- |
+| `output/schedule_result_advanced.json` | L2 動態排程結果 |
+| `output/acceptance_test_log_advanced.json` | Sporadic + aperiodic 線上處理紀錄 |
+| `input/aperiodic_n_sporadic.json` | Demo 工作清單 (計算 sporadic_value_rate) |
+| `input/price_72hr.json` | 市場價格 (含 realtime_price_factor) |
+| `input/processor_settings.json` | 含 L2 額外欄位，用於計算 `relaxed_assumptions` 區塊 |
+
+| 輸出 | 說明 |
+| --- | --- |
+| `output/evaluation_results_advanced.json` | 完整 L2 評估指標，含 tardiness / response time / jitter / post_acceptance_violation_rate / relaxed_assumptions |
+
+### 4.6 src/verifier.py / verifier_advanced.py — 限制式驗證
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -166,6 +189,7 @@ python3 src/task_generator.py
 python3 src/scheduler.py
 python3 src/evaluator.py
 python3 src/advanced_scheduler.py
+python3 src/evaluator_advanced.py     # 覆寫 evaluation_results_advanced.json 為完整版
 
 # 驗證
 python3 src/verifier.py
@@ -204,7 +228,7 @@ virtual-power-plant-real-time-system/
 │   ├── scheduler.py                # Level 1 日前排程 (Phase 1 ILP + online_phase)
 │   ├── evaluator.py                # Level 1 效能評估
 │   ├── advanced_scheduler.py       # Level 2 動態排程
-│   ├── evaluator_advanced.py       # Level 2 效能評估 (備用)
+│   ├── evaluator_advanced.py       # Level 2 完整效能評估 (Step 5 執行)
 │   ├── verifier.py                 # Level 1 限制式驗證
 │   └── verifier_advanced.py        # Level 2 限制式驗證
 ├── input/

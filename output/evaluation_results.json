@@ -3,18 +3,18 @@
   "soft_deadline_miss_rate": 0.0,
   "average_tardiness": 0.0,
   "max_tardiness": 0,
-  "average_response_time": 5.8947,
+  "average_response_time": 5.5614,
   "max_response_time": 19,
   "completion_time_jitter": {
-    "p1": 3.8324,
+    "p1": 4.062,
     "p2": 0.0,
-    "p3": 5.5227,
-    "p4": 3.4911,
-    "p5": 0.8749,
+    "p3": 4.4931,
+    "p4": 3.3541,
+    "p5": 0.6849,
     "p6": 2.0,
     "p7": 0.0,
-    "p8": 1.6997,
-    "p9": 2.1213
+    "p8": 1.4142,
+    "p9": 2.2913
   },
   "acceptance_test": {
     "total": 5,
@@ -32,8 +32,8 @@
     "discharge_efficiency": 0.92,
     "self_discharge_rate": 0.002,
     "aging_cost_per_MWh": 8.0,
-    "total_aging_cost": 6966.4,
-    "soc_dep_discharge_binding_hours": 25,
+    "total_aging_cost": 6916.8,
+    "soc_dep_discharge_binding_hours": 24,
     "market_mechanism": {
       "cancellation_penalty_rate": 0.3,
       "total_day_ahead_commit_MWh": 4046.8,
