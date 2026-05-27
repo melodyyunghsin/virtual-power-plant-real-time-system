@@ -25,12 +25,12 @@
       "e": 3,
       "w": 16.0,
       "slots": [
-        24,
-        25,
-        26
+        27,
+        28,
+        29
       ],
-      "sell_borrowed": 38.0,
-      "cost_estimate": 3608.0,
+      "sell_borrowed": 43.0,
+      "cost_estimate": 3704.0,
       "caused_violation": false
     },
     {
@@ -53,23 +53,27 @@
       "e": 2,
       "w": 10.0,
       "slots": [
-        48,
-        51
+        49,
+        50
       ],
       "sell_borrowed": 10.0,
-      "cost_estimate": 1225.0,
+      "cost_estimate": 1255.0,
       "caused_violation": false
     },
     {
       "job_id": "s5",
-      "decision": "reject",
+      "decision": "accept",
       "arrival": 61,
       "release": 61,
       "deadline": 70,
       "e": 2,
       "w": 14.0,
-      "reason": "strategic reject: cost $2289 > $1500 and current sporadic_value_rate floor 0.70 already \u2265 0.7",
-      "cost_estimate": 2289.0,
+      "slots": [
+        61,
+        62
+      ],
+      "sell_borrowed": 28.0,
+      "cost_estimate": 630.0,
       "caused_violation": false
     }
   ],
@@ -100,16 +104,16 @@
       "e": 3,
       "w": 12.0,
       "slots": [
-        10,
         23,
-        26
+        26,
+        28
       ],
-      "completion": 26,
+      "completion": 28,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 21.0,
-      "cost_estimate": 2089.0
+      "sell_borrowed": 16.0,
+      "cost_estimate": 2302.0
     },
     {
       "job_id": "a3",
@@ -119,17 +123,17 @@
       "e": 4,
       "w": 10.0,
       "slots": [
-        27,
-        28,
         29,
-        30
+        30,
+        31,
+        32
       ],
-      "completion": 30,
+      "completion": 32,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
       "sell_borrowed": 20.0,
-      "cost_estimate": 2465.0
+      "cost_estimate": 2505.0
     },
     {
       "job_id": "a4",
@@ -139,14 +143,14 @@
       "e": 1,
       "w": 15.0,
       "slots": [
-        31
+        26
       ],
-      "completion": 31,
+      "completion": 26,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 10.0,
-      "cost_estimate": 1030.0
+      "sell_borrowed": 15.0,
+      "cost_estimate": 1215.0
     },
     {
       "job_id": "a5",
@@ -156,15 +160,15 @@
       "e": 2,
       "w": 7.0,
       "slots": [
-        44,
-        45
+        46,
+        47
       ],
-      "completion": 45,
+      "completion": 47,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 9.0,
-      "cost_estimate": 698.0
+      "sell_borrowed": 4.0,
+      "cost_estimate": 760.0
     },
     {
       "job_id": "a6",
@@ -174,16 +178,16 @@
       "e": 3,
       "w": 13.0,
       "slots": [
-        44,
-        45,
-        46
+        51,
+        52,
+        53
       ],
-      "completion": 46,
+      "completion": 53,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 34.0,
-      "cost_estimate": 2534.0
+      "sell_borrowed": 24.0,
+      "cost_estimate": 2598.0
     },
     {
       "job_id": "a7",

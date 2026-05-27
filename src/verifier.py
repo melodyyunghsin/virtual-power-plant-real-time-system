@@ -101,15 +101,6 @@ def run_verifier():
         if Sell < -EPS:
             log_violation(22, f"t={t} 售電量為負: {Sell}")
 
-        # [commitment_nonneg / commitment_le_sell] (Assumption III)
-        commit_val = slot.get("day_ahead_commit", 0.0)
-        if commit_val < -EPS:
-            log_violation("commitment_nonneg",
-                          f"t={t} day_ahead_commit={commit_val:.4f} < 0")
-        if commit_val > Sell + 0.01:
-            log_violation("commitment_le_sell",
-                          f"t={t} day_ahead_commit={commit_val:.4f} > sell={Sell:.4f}")
-
         # ---------------------------------------------------------
         # 任務執行檢查 (Job Execution)
         # ---------------------------------------------------------
@@ -176,15 +167,9 @@ def run_verifier():
             p_val = P.get(rid, 0.0)
             fc_frac = forecast[rid].get(t, 0)
             max_p = ren["capacity"] * fc_frac
-            # [C13] 預測上限
+            # [C13] PV 出力不可超過預測上限
             if p_val > max_p + EPS:
                 log_violation(13, f"t={t} 再生能源 {rid} 出力 {p_val} 超過預測上限 {max_p}")
-            # [C13_robust] 8% safety margin (Assumption I)
-            err_std_v = 0.08
-            robust_limit = ren["capacity"] * fc_frac * (1 - err_std_v)
-            if p_val > robust_limit + 0.01:
-                log_violation("13_robust",
-                              f"t={t} {rid} 出力 {p_val:.4f} 超過 robust 上限 {robust_limit:.4f}")
 
         # ---------------------------------------------------------
         # 儲能設備檢查 (Batteries)
@@ -209,21 +194,15 @@ def run_verifier():
             if soc_val < bat["soc_min"] - EPS or soc_val > bat["soc_max"] + EPS:
                 log_violation(17, f"t={t} 電池 {bid} SOC {soc_val} 越界 [{bat['soc_min']}, {bat['soc_max']}]")
 
-            # [C16_L2] SOC dynamics with efficiency and self-discharge
-            eta_c  = float(bat.get("charge_efficiency",    1.0))
-            eta_d  = float(bat.get("discharge_efficiency", 1.0))
-            sigma  = float(bat.get("self_discharge_rate",  0.0))
+            # [C16] SOC dynamics (L1 ideal: no efficiency, no self-discharge)
             prev_soc = (sched[t_idx-1]["soc"].get(bid, bat["soc_init"])
                         if t > 1 else bat["soc_init"])
-            expected_soc = prev_soc * (1 - sigma) + chg_val * eta_c - dis_val / eta_d
+            expected_soc = prev_soc + chg_val - dis_val
             if abs(soc_val - expected_soc) > 0.05:
-                log_violation("16_L2", f"t={t} 電池 {bid} SOC 追蹤異常 (L2): 預期 {expected_soc:.4f}, 實際 {soc_val:.4f}")
-            # [C14_SOC_dep] SOC-dependent discharge limit
-            threshold_soc = 0.3 * bat["soc_max"]
-            if prev_soc < threshold_soc - EPS:
-                limit = bat["discharge_max"] * (prev_soc / threshold_soc)
-                if dis_val > limit + 0.01:
-                    log_violation("14_SOC_dep", f"t={t} 電池 {bid} 放電超過 SOC 相依上限: dis={dis_val:.4f} > limit={limit:.4f}")
+                log_violation(16, f"t={t} 電池 {bid} SOC 追蹤異常: 預期 {expected_soc:.4f}, 實際 {soc_val:.4f}")
+            # [C18] discharge cannot drop SOC below soc_min
+            if dis_val > prev_soc - bat["soc_min"] + EPS:
+                log_violation(18, f"t={t} 電池 {bid} 放電 {dis_val} 超過 SOC 餘量 {prev_soc - bat['soc_min']:.4f}")
 
     
     # ---------------------------------------------------------

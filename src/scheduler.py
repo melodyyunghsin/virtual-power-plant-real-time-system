@@ -72,47 +72,12 @@ def parse_renewable_forecast(proc):
     return forecasts
 
 
-def parse_renewable_actuals(proc):
-    """Returns {pv_id: list[H+1] of actual fractions}, 1-indexed.
-    Falls back to pv_forecast when pv_actual is absent (Level 1 compatibility)."""
-    actuals = {}
-    for entry in proc["renewable_forecast"]:
-        for pv_id, points in entry.items():
-            arr = [0.0] * (H + 1)
-            for v in points:
-                arr[int(v["hour"])] = float(v.get("pv_actual", v["pv_forecast"]))
-            actuals[pv_id] = arr
-    return actuals
-
-
-def parse_forecast_error_std(proc):
-    """Returns the forecast_error_std scalar (same for all renewables/hours)."""
-    for entry in proc["renewable_forecast"]:
-        for pv_id, points in entry.items():
-            for v in points:
-                return float(v.get("forecast_error_std", 0.0))
-    return 0.0
-
-
 def parse_price(price):
     """Returns list[H+1] of $/MWh, 1-indexed."""
     arr = [0.0] * (H + 1)
     for v in price["price"]:
         arr[int(v["hour"])] = float(v["market_price"])
     return arr
-
-
-def parse_price_extended(price):
-    """Returns (cancel_rate, rt_factors list[H+1]) from price file.
-    Defaults to cancel_rate=0.0 and factors=1.0 if fields are absent."""
-    cancel_rate = 0.0
-    rt_factors = [1.0] * (H + 1)
-    for v in price["price"]:
-        t = int(v["hour"])
-        rt_factors[t] = float(v.get("realtime_price_factor", 1.0))
-        if cancel_rate == 0.0:
-            cancel_rate = float(v.get("cancellation_penalty_rate", 0.0))
-    return cancel_rate, rt_factors
 
 
 # =============================================================================
@@ -189,8 +154,7 @@ def expand_aperiodic(aperiodic_set):
 # Phase 1 — Day-ahead static schedule (ILP)
 # =============================================================================
 
-def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
-                           cancel_rate=0.0, pv_actual=None, err_std=0.0):
+def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
     generators = proc["generator"]
     renewables = proc["renewable_capacity"]
     batteries  = proc["storage"]
@@ -221,13 +185,10 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
     chg   = pulp.LpVariable.dicts("chg",   (bat_ids, T), lowBound=0) # 電池充電率
     dis   = pulp.LpVariable.dicts("dis",   (bat_ids, T), lowBound=0) # 電池放電率
     soc   = pulp.LpVariable.dicts("soc",   (bat_ids, T), lowBound=0) # 電池電量
-    v_chg   = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary") # 1: 充電模式/ 0: 放電模式或閒置
-    soc_frac = pulp.LpVariable.dicts("sfrac", (bat_ids, T), lowBound=0, upBound=1) # soc_init / (0.3 * soc_max)
+    v_chg = pulp.LpVariable.dicts("vchg",  (bat_ids, T), cat="Binary") # 1: 充電模式 / 0: 放電模式或閒置
 
     sell        = pulp.LpVariable.dicts("sell",       T, lowBound=0) # 賣給市場的總功率
     sell_share  = pulp.LpVariable.dicts("sellshare",  (proc_ids, T), lowBound=0) # 各個設備賣給市場的功率
-    commit      = pulp.LpVariable.dicts("commit",     T, lowBound=0) # Phase 1 承諾賣給市場的功率
-    pen         = pulp.LpVariable.dicts("pen",        T, lowBound=0) # commit - sell
 
     # job execution variables (only inside [release, deadline] window)
     x = {}   # x[jid][t] 任務 j 是否在時間 t 執行
@@ -276,18 +237,17 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
             }
 
     # ----------------------------------------------------------- objective
-    f1 = pulp.lpSum(miss.values()) if miss else 0 
+    # min α·f1 + f2 + f3 — spec section 1.3 objective.
+    # In this pipeline f1 = 0 because no aperiodic jobs are added to the
+    # ILP (they are placed online in `online_phase`).
+    f1 = pulp.lpSum(miss.values()) if miss else 0
     f2 = pulp.lpSum(
-        gen_by_id[g]["cost_fixed"]    * u[g][t]
+        gen_by_id[g]["cost_fixed"] * u[g][t]
         + gen_by_id[g]["cost_variable"] * P[g][t]
         for g in gen_ids for t in T
-    ) + pulp.lpSum(
-        float(bat_by_id[b].get("aging_cost", 0.0)) * P[b][t] # Level 2
-        for b in bat_ids for t in T
     )
-    f3 = (-pulp.lpSum(price_arr[t] * sell[t] for t in T)
-          + pulp.lpSum(cancel_rate * price_arr[t] * pen[t] for t in T)) # Level 2
-    prob += ALPHA * f1 + f2 + f3, "TotalCost" 
+    f3 = -pulp.lpSum(price_arr[t] * sell[t] for t in T)
+    prob += ALPHA * f1 + f2 + f3, "TotalCost"
 
     # ----------------------------------------------------------- job execution
     for j in real_jobs:
@@ -375,42 +335,32 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
                 prob += u[g][t] == 0, f"c12_{g}_{t}"
 
     # ----------------------------------------------------------- renewables
-    # C13 with robust tightening: reduce available PV by forecast_error_std
-    # as a safety margin against forecast over-estimation (Assumption I).
-    robust_factor = 1.0 - err_std
+    # C13: P[pv,t] ≤ renewmax × Δt × forecast (spec section 1.3).
     for pv in pv_ids:
         cap = pv_by_id[pv]["capacity"]
         fc  = pv_forecast[pv]
         for t in T:
-            prob += P[pv][t] <= cap * fc[t] * robust_factor, f"pvmax_{pv}_{t}"
+            prob += P[pv][t] <= cap * fc[t], f"pvmax_{pv}_{t}"
 
     # ----------------------------------------------------------- batteries
+    # C14–C19, C21: storage with ideal dynamics (no efficiency, no
+    # self-discharge, no SOC-dependent discharge — those are L2 relaxations).
     for b in bat_ids:
         bd      = bat_by_id[b]
         soc_min, soc_max = bd["soc_min"],    bd["soc_max"]
         chg_max, dis_max = bd["charge_max"], bd["discharge_max"]
         soc_init         = bd["soc_init"]
-        eta_c  = float(bd.get("charge_efficiency",    1.0))
-        eta_d  = float(bd.get("discharge_efficiency", 1.0))
-        sigma  = float(bd.get("self_discharge_rate",  0.0))
-        sfrac_init = min(1.0, soc_init / (0.3 * soc_max))
 
         for t in T:
-            prob += chg[b][t] <= chg_max * v_chg[b][t],       f"cmx_{b}_{t}" # C15
-            prob += dis[b][t] <= dis_max * (1 - v_chg[b][t]), f"dmx_{b}_{t}" # C14
-            prob += soc[b][t] >= soc_min, f"smin_{b}_{t}" # C17
-            prob += soc[b][t] <= soc_max, f"smax_{b}_{t}" # C17
-            # C16 L2: SOC dynamics with round-trip efficiency and self-discharge
+            prob += chg[b][t] <= chg_max * v_chg[b][t],       f"cmx_{b}_{t}"  # C15
+            prob += dis[b][t] <= dis_max * (1 - v_chg[b][t]), f"dmx_{b}_{t}"  # C14
+            prob += soc[b][t] >= soc_min, f"smin_{b}_{t}"  # C17
+            prob += soc[b][t] <= soc_max, f"smax_{b}_{t}"  # C17
+            # C16: SOC dynamics (ideal, no efficiency or self-discharge)
             prev = soc[b][t - 1] if t > 1 else soc_init
-            prob += (soc[b][t] ==
-                     prev * (1 - sigma) # self-discharge
-                     + chg[b][t] * eta_c
-                     - dis[b][t] / eta_d), f"sdyn_{b}_{t}"
-            # soc_frac ∈ [0,1]: upper-bounded by SOC/(0.3*soc_max) 電池電量低於 30% 時，放電受限
-            prob += soc_frac[b][t] * (0.3 * soc_max) <= soc[b][t], f"sfrac_ub_{b}_{t}"
-            # SOC-dependent discharge limit uses previous-hour soc_frac
-            prev_sfrac = soc_frac[b][t - 1] if t > 1 else sfrac_init
-            prob += dis[b][t] <= dis_max * prev_sfrac, f"sdeplim_{b}_{t}"
+            prob += soc[b][t] == prev + chg[b][t] - dis[b][t], f"sdyn_{b}_{t}"
+            # C18: discharge cannot drop SOC below soc_min
+            prob += dis[b][t] <= prev - soc_min, f"sdeplim_{b}_{t}"
             prob += P[b][t] == dis[b][t], f"pdis_{b}_{t}"
 
     # ----------------------------------------------------------- balance
@@ -430,13 +380,7 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
 
     for t in T:
         prob += sell[t] == pulp.lpSum(sell_share[i][t] for i in proc_ids), \
-                f"sellsum_{t}"
-
-    # ---- commitment constraints (Assumption III: flexible market mechanism) --
-    for t in T:
-        prob += commit[t] <= sell[t],               f"commit_le_sell_{t}"
-        prob += commit[t] == sell[t],               f"commit_eq_sell_{t}"  # static schedule
-        prob += pen[t] >= commit[t] - sell[t],      f"pen_lb_{t}"
+                f"sellsum_{t}"  # C22 (sell ≥ 0 is implicit in lowBound)
 
     # ------------------------------------------------------------ solve
     n_vars = len(prob.variables())
@@ -463,16 +407,13 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs,
 
     schedule = []
     for t in T:
-        _pv_act = pv_actual if pv_actual is not None else pv_forecast
         rec = {
             "t":                 t,
             "P":                 {},
             "k":                 {},
             "sell":              round(val(sell[t]), 4),
-            "day_ahead_commit":  round(val(commit[t]), 4),
             "soc":               {b: round(val(soc[b][t]), 4) for b in bat_ids},
             "pv_forecast":       {pv: round(pv_forecast[pv][t], 4) for pv in pv_ids},
-            "pv_actual":         {pv: round(_pv_act[pv][t], 4) for pv in pv_ids},
             "missed_aperiodic":  [],
             "rejected_sporadic": [],
         }
@@ -538,10 +479,9 @@ class SlackAbsorber:
     generators, then ramp up PVs.
     """
 
-    def __init__(self, schedule, proc, pv_forecast, err_std=0.0):
+    def __init__(self, schedule, proc, pv_forecast):
         self.schedule    = schedule
         self.pv_forecast = pv_forecast
-        self.robust      = 1.0 - float(err_std)   # robust PV bound coefficient
         self.gens        = {g["generator_id"]: g for g in proc["generator"]}
         self.pvs         = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
         self.gen_ids     = list(self.gens)
@@ -566,9 +506,9 @@ class SlackAbsorber:
             )
             s += max(0.0, max_new - p_curr) # 發電機的剩餘可用產能
         for pv in self.pv_ids:
-            cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t] * self.robust
+            cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
             curr = rec["P"].get(pv, 0.0)
-            s += max(0.0, cap_avail - curr) # 沒用到的 Renewable (err_std)
+            s += max(0.0, cap_avail - curr)  # PV underutilisation
         return s
 
     def commit_at(self, t, w, target_jid):
@@ -634,7 +574,7 @@ class SlackAbsorber:
             for pv in self.pv_ids:
                 if remaining <= EPS:
                     break
-                cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t] * self.robust
+                cap_avail = self.pvs[pv]["capacity"] * self.pv_forecast[pv][t]
                 curr = rec["P"].get(pv, 0.0)
                 avail = cap_avail - curr
                 if avail <= EPS:
@@ -664,7 +604,7 @@ INF = float("inf")
 
 
 def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
-                 pv_forecast, err_std=0.0, price_arr=None):
+                 pv_forecast, price_arr=None):
     """Replaces Phase 2 + Phase 3 with a single release-time-ordered pass.
 
     Behaviour:
@@ -685,7 +625,7 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
 
     Returns (acceptance_log, aperiodic_log).
     """
-    absorber = SlackAbsorber(schedule, proc, pv_forecast, err_std=err_std)
+    absorber = SlackAbsorber(schedule, proc, pv_forecast)
 
     def _hour_cost(t, w):
         """Marginal $ cost of placing w MWh at hour t — sell loss + cheapest
@@ -701,7 +641,7 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         pv_avail = 0.0
         for pv in absorber.pv_ids:
             cap_avail = (absorber.pvs[pv]["capacity"]
-                         * absorber.pv_forecast[pv][t] * absorber.robust)
+                         * absorber.pv_forecast[pv][t])
             curr = rec["P"].get(pv, 0.0)
             pv_avail += max(0.0, cap_avail - curr)
         # Gen headroom and its marginal $/MWh, across all on generators.
@@ -915,13 +855,13 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                     prob += ((p_curr + dx[g][t]) - (p_next_curr + dx[g][tn])
                              <= rd), f"rd_{g}_{t}"
 
-        # PV: robust capacity cap
+        # PV: capacity cap (C13)
         for pv in absorber.pv_ids:
             cap = absorber.pvs[pv]["capacity"]
             for t in T:
                 rec = schedule[t - 1]
                 p_curr = rec["P"].get(pv, 0.0)
-                max_pv = cap * absorber.pv_forecast[pv][t] * absorber.robust
+                max_pv = cap * absorber.pv_forecast[pv][t]
                 prob += p_curr + dp[pv][t] <= max_pv, f"pvmx_{pv}_{t}"
 
         solver = pulp.PULP_CBC_CMD(msg=False)
@@ -1192,11 +1132,8 @@ def print_summary(schedule, obj, periodic_jobs, aperiodic_jobs, sporadic_input):
 
 def main():
     proc, price_data, task_set = load_inputs()
-    pv_forecast              = parse_renewable_forecast(proc)
-    pv_actual                = parse_renewable_actuals(proc)
-    err_std                  = parse_forecast_error_std(proc)
-    price_arr                = parse_price(price_data)
-    cancel_rate, rt_factors  = parse_price_extended(price_data)
+    pv_forecast = parse_renewable_forecast(proc)
+    price_arr   = parse_price(price_data)
 
     periodic_jobs  = expand_periodic(task_set.get("periodic", {}))
     aperiodic_jobs = expand_aperiodic(task_set.get("aperiodic", []))
@@ -1204,22 +1141,20 @@ def main():
 
     # Phase 1 schedules only periodic jobs (the day-ahead static schedule).
     # Per spec assumption 6, aperiodic and sporadic jobs arrive during
-    # execution; they are handled in Phase 2 (sporadic acceptance) and
-    # Phase 3 (aperiodic queue) respectively.
+    # execution; they are handled by `online_phase` below.
     print(f"[Input] {len(periodic_jobs)} periodic instances, "
           f"{len(aperiodic_jobs)} aperiodic, "
           f"{len(sporadic_input)} sporadic inbound")
 
     schedule, obj = phase1_static_schedule(
-        proc, pv_forecast, price_arr, periodic_jobs,
-        cancel_rate=cancel_rate, pv_actual=pv_actual, err_std=err_std
+        proc, pv_forecast, price_arr, periodic_jobs
     )
 
     # Single time-ordered online pass: sporadic acceptance test +
     # aperiodic force-placement, processed in release-time order.
     acceptance_log, aperiodic_log = online_phase(
         schedule, sporadic_input, aperiodic_jobs, proc, pv_forecast,
-        err_std=err_std, price_arr=price_arr,
+        price_arr=price_arr,
     )
 
     write_outputs(schedule, acceptance_log, aperiodic_log)

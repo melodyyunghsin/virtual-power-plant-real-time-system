@@ -31,13 +31,50 @@ import pulp
 from scheduler import (
     H, ALPHA, EPS, RESERVE_PER_GEN,
     OUTPUT_DIR,
-    load_inputs, parse_renewable_forecast, parse_renewable_actuals,
-    parse_forecast_error_std, parse_price, parse_price_extended,
+    load_inputs, parse_renewable_forecast, parse_price,
     expand_periodic, expand_aperiodic,
     SlackAbsorber,
 )
 
 INF = float("inf")
+
+
+# ============================================================================
+# Level-2-only input parsers
+# ============================================================================
+
+def parse_renewable_actuals(proc):
+    """{pv_id: list[H+1] of actual fractions}, 1-indexed.
+    Falls back to pv_forecast when pv_actual is absent (Assumption I)."""
+    actuals = {}
+    for entry in proc["renewable_forecast"]:
+        for pv_id, points in entry.items():
+            arr = [0.0] * (H + 1)
+            for v in points:
+                arr[int(v["hour"])] = float(v.get("pv_actual", v["pv_forecast"]))
+            actuals[pv_id] = arr
+    return actuals
+
+
+def parse_forecast_error_std(proc):
+    """Returns the forecast_error_std scalar (Assumption I robust margin)."""
+    for entry in proc["renewable_forecast"]:
+        for pv_id, points in entry.items():
+            for v in points:
+                return float(v.get("forecast_error_std", 0.0))
+    return 0.0
+
+
+def parse_price_extended(price):
+    """Returns (cancel_rate, rt_factors list[H+1]) — Assumption III."""
+    cancel_rate = 0.0
+    rt_factors = [1.0] * (H + 1)
+    for v in price["price"]:
+        t = int(v["hour"])
+        rt_factors[t] = float(v.get("realtime_price_factor", 1.0))
+        if cancel_rate == 0.0:
+            cancel_rate = float(v.get("cancellation_penalty_rate", 0.0))
+    return cancel_rate, rt_factors
 
 
 # ============================================================================
@@ -124,10 +161,18 @@ class AdvancedScheduler:
                 "last_P": float(gd.get("initial_energy", 0)),
             }
 
-        # Slack absorber operates on the rolling plan; same `self.plan`
-        # reference as below, so its slack_at sees post-commit P values.
+        # Robust PV multiplier (Assumption I): the L2 day-ahead plan and
+        # online commits use forecast · (1 − err_std) so a small PV drop at
+        # realisation doesn't break the energy balance.
+        self.robust = 1.0 - float(self.err_std)
+        # Pre-discounted forecast handed to SlackAbsorber so its internal
+        # PV slack and ramp calculations stay below the robust bound.
+        self.pv_forecast_robust = {
+            pv: [v * self.robust for v in self.pv_forecast[pv]]
+            for pv in self.pv_ids
+        }
         self.absorber = SlackAbsorber(
-            self.plan, self.proc, self.pv_forecast, err_std=self.err_std
+            self.plan, self.proc, self.pv_forecast_robust
         )
 
         # Tracking
@@ -149,6 +194,15 @@ class AdvancedScheduler:
         self.total_sp_e = sum(int(sj.get("e", 0))
                               for sj in self.sporadic_input)
         self.accepted_sp_e = 0
+
+        # Initial L2 adaptation: L1's day-ahead plan was built with ideal
+        # battery dynamics (no efficiency / self-discharge / aging) and no
+        # robust PV bound. Run one replan over the first window so the plan
+        # is L2-consistent before hour 1 executes — otherwise the first few
+        # hours may carry over L1 dispatch values that breach L2 constraints
+        # (e.g. battery discharge that would drop SOC below soc_min once
+        # eta_d is applied).
+        self._rolling_replan(1)
 
     # -- main loop ----------------------------------------------------------
     def run(self):
@@ -233,7 +287,7 @@ class AdvancedScheduler:
         pv_avail = 0.0
         for pv in self.pv_ids:
             cap_avail = (self.pv_by_id[pv]["capacity"]
-                         * self.pv_forecast[pv][t] * self.absorber.robust)
+                         * self.pv_forecast[pv][t] * self.robust)
             curr = rec["P"].get(pv, 0.0)
             pv_avail += max(0.0, cap_avail - curr)
         # Per-gen headroom and marginal $/MWh.
@@ -409,7 +463,7 @@ class AdvancedScheduler:
             for t in T:
                 rec = self.plan[t - 1]
                 p_curr = rec["P"].get(pv, 0.0)
-                max_pv = cap * self.pv_forecast[pv][t] * self.absorber.robust
+                max_pv = cap * self.pv_forecast[pv][t] * self.robust
                 prob += p_curr + dp[pv][t] <= max_pv, f"pvmx_{pv}_{t}"
         solver = pulp.PULP_CBC_CMD(msg=False)
         prob.solve(solver)
@@ -723,14 +777,16 @@ class AdvancedScheduler:
                     prob += u[g][t] == 0, f"finit_off_{g}_{t}"
 
         # ------- renewables ------------------------------------------------
-        # First hour: pv_actual is revealed; remaining hours: pv_forecast·0.92
+        # Assumption I: pv_actual is revealed for the current hour; future
+        # hours use the robust forecast `forecast · (1 − err_std)` so a
+        # subsequent small downward deviation doesn't break the schedule.
         for pv in self.pv_ids:
             cap = self.pv_by_id[pv]["capacity"]
             for t in T:
                 if t == t_now:
                     bound = cap * self.pv_actual[pv][t]
                 else:
-                    bound = cap * self.pv_forecast[pv][t] * (1 - self.err_std)
+                    bound = cap * self.pv_forecast[pv][t] * self.robust
                 prob += P[pv][t] <= bound, f"pvmx_{pv}_{t}"
 
         # ------- batteries -------------------------------------------------
