@@ -47,7 +47,12 @@ INF = float("inf")
 class AdvancedScheduler:
     WINDOW = 12
     REPLAN_INTERVAL = 6
-    PV_DEV_THRESH = 0.15
+    # Trigger replan when actual PV drops below the planning bound. The plan
+    # was built against forecast·(1 − err_std), so any downward deviation
+    # exceeding err_std (8 % here) means planned PV would breach actual cap
+    # at execution and create an energy-balance shortfall. We trigger a hair
+    # below err_std (7 %) so borderline cases (~8 % drops) are captured.
+    PV_DEV_THRESH = 0.07
     REPLAN_TIME_LIMIT = 30
 
     # -- init ---------------------------------------------------------------
@@ -83,11 +88,28 @@ class AdvancedScheduler:
         static_path = OUTPUT_DIR / "schedule_result.json"
         static_data = json.loads(static_path.read_text(encoding="utf-8"))
         self.plan = copy.deepcopy(static_data["schedule_result"])
-        # Day-ahead commitment locked from static
+        # Day-ahead commitment locked from static (BEFORE we strip sporadic /
+        # aperiodic allocations below, so the commit reflects L1's expected sell).
         self.locked_commit = {
             slot["t"]: float(slot.get("day_ahead_commit", slot.get("sell", 0.0)))
             for slot in self.plan
         }
+        # Strip L1's sporadic / aperiodic placements from the plan so L2 can
+        # re-place them online without double-counting (C1 violation: a job's
+        # allocation appearing both in the static plan and in the online
+        # commit). Freed energy reverts to `sell`, which the online commit
+        # path will draw from as needed.
+        sporadic_ids = {str(sj.get("id")) for sj in self.sporadic_input}
+        aperiodic_ids = {aj["id"] for aj in self.aperiodic_jobs}
+        foreign_ids = sporadic_ids | aperiodic_ids
+        for slot in self.plan:
+            freed = 0.0
+            for jid in list(slot.get("k", {})):
+                if jid in foreign_ids:
+                    freed += sum(slot["k"][jid].values())
+                    del slot["k"][jid]
+            if freed > EPS:
+                slot["sell"] = round(slot.get("sell", 0.0) + freed, 4)
 
         # Simulation state (updated each executed hour)
         self.soc = {b: float(self.bat_by_id[b]["soc_init"]) for b in self.bat_ids}
@@ -186,13 +208,16 @@ class AdvancedScheduler:
 
     # -- PV deviation -------------------------------------------------------
     def _pv_deviation(self, t):
-        max_dev = 0.0
+        """One-sided downward deviation `(forecast − actual) / forecast`.
+        Surplus (actual > forecast) is ignored; only drops matter because
+        only drops can break the schedule's energy balance at execution."""
+        max_drop = 0.0
         for pv in self.pv_ids:
             fc = self.pv_forecast[pv][t]
             ac = self.pv_actual[pv][t]
             if fc > 0.01:
-                max_dev = max(max_dev, abs(ac - fc) / fc)
-        return max_dev
+                max_drop = max(max_drop, max(0.0, (fc - ac) / fc))
+        return max_drop
 
     # -- slack / cost helpers (mirror scheduler.online_phase) ---------------
     def _hour_cost(self, t, w):
