@@ -14,7 +14,7 @@
       ],
       "preempt": 1,
       "sell_borrowed": 19.0,
-      "cost_estimate": 1075.0,
+      "cost_estimate": 1285.0,
       "caused_violation": false
     },
     {
@@ -26,13 +26,13 @@
       "e": 3,
       "w": 16.0,
       "slots": [
-        23,
-        24,
-        25
+        26,
+        27,
+        28
       ],
       "preempt": 0,
-      "sell_borrowed": 23.0,
-      "cost_estimate": 2041.0,
+      "sell_borrowed": 33.0,
+      "cost_estimate": 3314.0,
       "caused_violation": false
     },
     {
@@ -60,7 +60,7 @@
       ],
       "preempt": 1,
       "sell_borrowed": 10.0,
-      "cost_estimate": 805.0,
+      "cost_estimate": 1225.0,
       "caused_violation": false
     },
     {
@@ -72,12 +72,12 @@
       "e": 2,
       "w": 14.0,
       "slots": [
-        69,
-        70
+        61,
+        62
       ],
       "preempt": 0,
-      "sell_borrowed": 13.0,
-      "cost_estimate": 1379.0,
+      "sell_borrowed": 28.0,
+      "cost_estimate": 630.0,
       "caused_violation": false
     }
   ],
@@ -98,7 +98,7 @@
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
       "sell_borrowed": 11.0,
-      "cost_estimate": 634.0
+      "cost_estimate": 844.0
     },
     {
       "job_id": "a2",
@@ -117,7 +117,7 @@
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
       "sell_borrowed": 31.0,
-      "cost_estimate": 1223.0
+      "cost_estimate": 1433.0
     },
     {
       "job_id": "a3",
@@ -137,7 +137,7 @@
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
       "sell_borrowed": 10.0,
-      "cost_estimate": 850.0
+      "cost_estimate": 2390.0
     },
     {
       "job_id": "a4",
@@ -153,8 +153,8 @@
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 10.0,
-      "cost_estimate": 810.0
+      "sell_borrowed": 5.0,
+      "cost_estimate": 965.0
     },
     {
       "job_id": "a5",
@@ -164,15 +164,15 @@
       "e": 2,
       "w": 7.0,
       "slots": [
-        46,
+        44,
         47
       ],
       "completion": 47,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
-      "sell_borrowed": 4.0,
-      "cost_estimate": 340.0
+      "sell_borrowed": 9.0,
+      "cost_estimate": 708.0
     },
     {
       "job_id": "a6",
@@ -191,7 +191,7 @@
       "missed_soft_deadline": false,
       "via_sell_borrow": true,
       "sell_borrowed": 29.0,
-      "cost_estimate": 1944.0
+      "cost_estimate": 2364.0
     },
     {
       "job_id": "a7",
@@ -201,17 +201,17 @@
       "e": 4,
       "w": 9.0,
       "slots": [
-        53,
-        54,
         55,
-        56
+        58,
+        60,
+        61
       ],
-      "completion": 56,
+      "completion": 61,
       "tardiness": 0,
       "missed_soft_deadline": false,
-      "via_sell_borrow": false,
-      "sell_borrowed": 0.0,
-      "cost_estimate": 0.0
+      "via_sell_borrow": true,
+      "sell_borrowed": 18.0,
+      "cost_estimate": 1664.0
     },
     {
       "job_id": "a8",
@@ -239,14 +239,14 @@
       "e": 1,
       "w": 5.0,
       "slots": [
-        69
+        70
       ],
-      "completion": 69,
+      "completion": 70,
       "tardiness": 0,
       "missed_soft_deadline": false,
       "via_sell_borrow": false,
       "sell_borrowed": 0.0,
-      "cost_estimate": 0.0
+      "cost_estimate": 210.0
     }
   ]
 }

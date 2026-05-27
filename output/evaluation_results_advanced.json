@@ -1,45 +1,59 @@
 {
   "hard_deadline_miss_rate": 0.0,
   "soft_deadline_miss_rate": 0.0,
-  "generator_cost": 311033.77,
-  "market_revenue": 335850.39,
-  "cancellation_penalty": 6153.68,
-  "net_market_revenue": 329696.71,
-  "objective_value": -24816.62,
+  "average_tardiness": 0.0,
+  "max_tardiness": 0,
+  "average_response_time": 5.386,
+  "max_response_time": 23,
+  "completion_time_jitter": {
+    "p1": 3.3541,
+    "p2": 0.0,
+    "p3": 4.5,
+    "p4": 3.3541,
+    "p5": 0.8315,
+    "p6": 1.8725,
+    "p7": 0.0,
+    "p8": 3.2998,
+    "p9": 2.0616
+  },
   "acceptance_test": {
     "total": 5,
     "accepted": 4,
     "rejected": 1
   },
   "sporadic_value_rate": 0.9,
-  "advanced_scheduler": {
-    "method": "Event-Triggered Rolling Horizon",
-    "window_size": 12,
-    "replan_interval": 6,
-    "deviation_threshold": 0.15,
-    "total_replans": 26,
-    "replan_failures": 0,
-    "replan_triggers": {
-      "pv_deviation": 3,
-      "sporadic_arrival": 4,
-      "periodic_6h": 12,
-      "aperiodic_arrival": 9
+  "post_acceptance_violation_rate": 0.0,
+  "generator_cost": 324983.77,
+  "market_revenue": 354915.5,
+  "objective_value": -29931.72,
+  "relaxed_assumptions": {
+    "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
+    "charge_efficiency": 0.95,
+    "discharge_efficiency": 0.92,
+    "self_discharge_rate": 0.002,
+    "aging_cost_per_MWh": 8.0,
+    "total_aging_cost": 3613.44,
+    "soc_dep_discharge_binding_hours": 40,
+    "market_mechanism": {
+      "cancellation_penalty_rate": 0.3,
+      "total_day_ahead_commit_MWh": 4025.7548,
+      "total_realtime_sell_MWh": 4107.5365,
+      "total_cancellation_penalty": 2924.94,
+      "net_market_revenue": 351990.56,
+      "realtime_price_stats": {
+        "min_factor": 0.8,
+        "max_factor": 1.39,
+        "avg_factor": 1.0244
+      }
     },
-    "total_cancellation_penalty": 6153.68,
-    "vs_static": {
-      "objective_value_static": -57551.45,
-      "objective_value_dynamic": -24816.62,
-      "generator_cost_static": 291120.0,
-      "generator_cost_dynamic": 311033.77,
-      "generator_cost_change": 19913.77,
-      "market_revenue_static": 348671.45,
-      "market_revenue_dynamic": 335850.39,
-      "market_revenue_change": -12821.06,
-      "cancellation_penalty_total": 6153.68,
-      "soft_miss_rate_static": 0.0,
-      "soft_miss_rate_dynamic": 0.0,
-      "sporadic_value_rate_static": 0.9,
-      "sporadic_value_rate_dynamic": 0.9
+    "renewable_uncertainty": {
+      "forecast_error_std": 0.08,
+      "total_forecast_MWh": 1524.6,
+      "total_actual_MWh": 1527.44,
+      "total_absolute_error_MWh": 82.17,
+      "hours_with_shortfall": 37,
+      "hours_with_surplus": 38,
+      "robust_tightening_total_MWh": 121.97
     }
   }
 }

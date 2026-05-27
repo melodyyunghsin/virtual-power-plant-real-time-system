@@ -120,13 +120,10 @@
         },
         "p5": {
           "thermal_1": 9.0
-        },
-        "s1": {
-          "thermal_1": 12.0
         }
       },
-      "sell": 44.0,
-      "day_ahead_commit": 44.0,
+      "sell": 56.0,
+      "day_ahead_commit": 56.0,
       "soc": {
         "battery_1": 42.0309,
         "battery_2": 24.751
@@ -152,11 +149,11 @@
         "p5": {
           "thermal_1": 9.0
         },
-        "s1": {
-          "thermal_1": 12.0
-        },
         "a1": {
           "thermal_1": 8.0
+        },
+        "s1": {
+          "thermal_1": 12.0
         },
         "battery_1_chg": {
           "thermal_1": 0.0
@@ -195,12 +192,12 @@
           "thermal_1": 6.792,
           "pv_2": 2.208
         },
-        "a1": {
-          "thermal_1": 8.0
+        "s1": {
+          "thermal_1": 12.0
         }
       },
-      "sell": 61.864,
-      "day_ahead_commit": 66.864,
+      "sell": 57.864,
+      "day_ahead_commit": 62.864,
       "soc": {
         "battery_1": 41.8629,
         "battery_2": 26.3772
@@ -284,13 +281,12 @@
         "pv_2": 22.08
       },
       "k": {
-        "s1": {
-          "thermal_1": 14.8,
-          "pv_1": 5.56,
-          "pv_2": 3.64
-        },
         "a1": {
-          "thermal_1": 8.0
+          "thermal_1": 16.0
+        },
+        "s1": {
+          "pv_1": 5.56,
+          "pv_2": 18.44
         },
         "p4": {
           "pv_1": 11.0
@@ -299,17 +295,17 @@
           "thermal_1": 24.0
         },
         "battery_1_chg": {
-          "thermal_1": 1.3932
+          "pv_2": 3.64
         },
         "battery_2_chg": {
-          "thermal_1": 11.8068
+          "thermal_1": 9.56
         }
       },
-      "sell": 18.44,
-      "day_ahead_commit": 44.2864,
+      "sell": 10.44,
+      "day_ahead_commit": 36.2864,
       "soc": {
-        "battery_1": 21.2835,
-        "battery_2": 21.1965
+        "battery_1": 23.418,
+        "battery_2": 19.062
       },
       "pv_forecast": {
         "pv_1": 0.3,
@@ -355,8 +351,8 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 40.241,
-        "battery_2": 28.3969
+        "battery_1": 42.3712,
+        "battery_2": 26.2667
       },
       "pv_forecast": {
         "pv_1": 0.23,
@@ -399,8 +395,8 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 56.6734,
-        "battery_2": 42.5901
+        "battery_1": 58.7993,
+        "battery_2": 40.4642
       },
       "pv_forecast": {
         "pv_1": 0.27,
@@ -429,19 +425,19 @@
           "pv_1": 9.0
         },
         "battery_1_chg": {
-          "thermal_1": 5.904,
+          "thermal_1": 7.8033,
           "pv_2": 10.872
         },
         "battery_2_chg": {
-          "thermal_1": 9.096,
+          "thermal_1": 7.1967,
           "pv_1": 5.904
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 72.4972,
-        "battery_2": 56.7549
+        "battery_1": 76.4233,
+        "battery_2": 52.8289
       },
       "pv_forecast": {
         "pv_1": 0.27,
@@ -463,11 +459,11 @@
       },
       "k": {
         "p5": {
-          "pv_2": 9.0
-        },
-        "p8": {
           "pv_1": 8.832,
           "pv_2": 0.168
+        },
+        "p8": {
+          "pv_2": 9.0
         },
         "battery_2_chg": {
           "pv_2": 2.608
@@ -476,8 +472,8 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 72.3522,
-        "battery_2": 59.119
+        "battery_1": 76.2704,
+        "battery_2": 55.2008
       },
       "pv_forecast": {
         "pv_1": 0.16,
@@ -499,21 +495,18 @@
       },
       "k": {
         "p5": {
-          "pv_1": 1.9558,
-          "pv_2": 7.0442
-        },
-        "battery_1_chg": {
-          "pv_1": 4.1162
+          "pv_1": 6.072,
+          "pv_2": 2.928
         },
         "battery_2_chg": {
-          "pv_2": 1.0518
+          "pv_2": 5.168
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
         "battery_1": 76.1179,
-        "battery_2": 60.0
+        "battery_2": 60
       },
       "pv_forecast": {
         "pv_1": 0.11,
@@ -550,7 +543,7 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 80.8962,
+        "battery_1": 80.8961,
         "battery_2": 59.88
       },
       "pv_forecast": {
@@ -585,7 +578,7 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 80.7344,
+        "battery_1": 80.7343,
         "battery_2": 59.7602
       },
       "pv_forecast": {
@@ -688,7 +681,7 @@
           "thermal_1": 7.0
         },
         "battery_1_chg": {
-          "thermal_1": 15.1471
+          "thermal_1": 15.1472
         },
         "battery_2_chg": {
           "thermal_1": 0.6291
@@ -717,19 +710,18 @@
       "P": {
         "thermal_1": 75.0,
         "thermal_2": 20.0,
-        "battery_1": 7.3952,
-        "battery_2": 0.6048
+        "battery_1": 8.0
       },
       "k": {
         "a1": {
-          "thermal_2": 8.0
+          "thermal_1": 8.0
         }
       },
       "sell": 95.0,
       "day_ahead_commit": 95.0,
       "soc": {
-        "battery_1": 91.7617,
-        "battery_2": 59.2226
+        "battery_1": 91.1043,
+        "battery_2": 59.88
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -759,8 +751,8 @@
       "sell": 140.0,
       "day_ahead_commit": 140.0,
       "soc": {
-        "battery_1": 69.8391,
-        "battery_2": 42.7998
+        "battery_1": 69.183,
+        "battery_2": 43.4559
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -784,13 +776,51 @@
       },
       "k": {
         "p7": {
+          "thermal_2": 10.0
+        },
+        "p5": {
+          "thermal_2": 9.0
+        },
+        "a2": {
+          "thermal_2": 12.0
+        },
+        "a3": {
+          "thermal_2": 9.0,
+          "battery_2": 1.0
+        }
+      },
+      "sell": 109.0,
+      "day_ahead_commit": 129.0,
+      "soc": {
+        "battery_1": 47.3055,
+        "battery_2": 27.0646
+      },
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
+      "pv_actual": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
+      "missed_aperiodic": [],
+      "rejected_sporadic": [],
+      "cancellation_penalty": 564.0
+    },
+    {
+      "t": 24,
+      "P": {
+        "thermal_1": 75.0,
+        "thermal_2": 40.0,
+        "battery_1": 4.9571,
+        "battery_2": 5.6112
+      },
+      "k": {
+        "p7": {
           "thermal_1": 10.0
         },
         "p5": {
           "thermal_1": 9.0
-        },
-        "a2": {
-          "thermal_1": 12.0
         },
         "a3": {
           "thermal_1": 10.0
@@ -799,50 +829,11 @@
           "thermal_1": 16.0
         }
       },
-      "sell": 93.0,
-      "day_ahead_commit": 129.0,
-      "soc": {
-        "battery_1": 47.9603,
-        "battery_2": 26.4099
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
-      "pv_actual": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
-      "missed_aperiodic": [],
-      "rejected_sporadic": [],
-      "cancellation_penalty": 1015.2
-    },
-    {
-      "t": 24,
-      "P": {
-        "thermal_1": 75.0,
-        "thermal_2": 40.0,
-        "battery_1": 5.5583
-      },
-      "k": {
-        "p7": {
-          "thermal_1": 10.0
-        },
-        "p5": {
-          "thermal_1": 9.0
-        },
-        "a3": {
-          "thermal_1": 10.0
-        },
-        "s2": {
-          "thermal_1": 32.0
-        }
-      },
-      "sell": 59.5583,
+      "sell": 80.5683,
       "day_ahead_commit": 85.0,
       "soc": {
         "battery_1": 41.8227,
-        "battery_2": 26.357
+        "battery_2": 20.9114
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -854,7 +845,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 633.4983
+      "cancellation_penalty": 110.3493
     },
     {
       "t": 25,
@@ -862,25 +853,23 @@
         "thermal_1": 75.0,
         "thermal_2": 40.0,
         "battery_1": 20.0,
-        "battery_2": 15.0
+        "battery_2": 10.0
       },
       "k": {
         "p7": {
-          "battery_2": 10.0
+          "battery_1": 10.0
         },
         "p5": {
-          "thermal_1": 4.0,
-          "battery_2": 5.0
+          "thermal_2": 9.0
         },
         "a3": {
           "battery_1": 10.0
         },
         "s2": {
-          "thermal_1": 22.0,
-          "battery_1": 10.0
+          "thermal_2": 16.0
         }
       },
-      "sell": 89.0,
+      "sell": 100.0,
       "day_ahead_commit": 100.0,
       "soc": {
         "battery_1": 20,
@@ -896,7 +885,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 293.7
+      "cancellation_penalty": 0.0
     },
     {
       "t": 26,
@@ -909,30 +898,30 @@
           "thermal_1": 10.0
         },
         "s2": {
-          "thermal_1": 9.0,
-          "thermal_2": 7.0
+          "thermal_1": 32.0
         },
         "p6": {
-          "thermal_2": 18.0
+          "thermal_1": 5.9579,
+          "thermal_2": 12.0421
         },
         "a2": {
           "thermal_1": 12.0
         },
         "a4": {
-          "thermal_2": 15.0
+          "thermal_1": 15.0
         },
         "battery_1_chg": {
           "thermal_1": 0.0421
         },
         "battery_2_chg": {
-          "thermal_1": 3.3479
+          "thermal_2": 0.0211
         }
       },
-      "sell": 40.61,
+      "sell": 27.9368,
       "day_ahead_commit": 34.0,
       "soc": {
         "battery_1": 20,
-        "battery_2": 13.1605
+        "battery_2": 10.0
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -944,31 +933,37 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 0.0
+      "cancellation_penalty": 147.3358
     },
     {
       "t": 27,
       "P": {
         "thermal_1": 75.0,
-        "thermal_2": 20.0
+        "thermal_2": 40.0
       },
       "k": {
         "a3": {
-          "thermal_2": 10.0
+          "thermal_1": 4.0,
+          "thermal_2": 6.0
+        },
+        "s2": {
+          "thermal_2": 16.0
         },
         "p6": {
-          "thermal_1": 18.0
+          "thermal_2": 18.0
         },
         "battery_1_chg": {
-          "thermal_1": 5.0,
-          "thermal_2": 10.0
+          "thermal_1": 3.9377
+        },
+        "battery_2_chg": {
+          "thermal_1": 0.0211
         }
       },
-      "sell": 52.0,
+      "sell": 67.0412,
       "day_ahead_commit": 52.0,
       "soc": {
-        "battery_1": 34.21,
-        "battery_2": 13.1342
+        "battery_1": 23.7008,
+        "battery_2": 10.0001
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -986,19 +981,28 @@
       "t": 28,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 5.0
+        "thermal_2": 40.0
       },
       "k": {
         "a3": {
           "thermal_1": 5.0,
-          "battery_1": 5.0
+          "thermal_2": 5.0
+        },
+        "s2": {
+          "thermal_2": 16.0
+        },
+        "battery_1_chg": {
+          "thermal_2": 18.8304
+        },
+        "battery_2_chg": {
+          "thermal_2": 0.1696
         }
       },
       "sell": 70.0,
       "day_ahead_commit": 70.0,
       "soc": {
-        "battery_1": 28.7068,
-        "battery_2": 13.1079
+        "battery_1": 41.5423,
+        "battery_2": 10.1412
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1016,23 +1020,21 @@
       "t": 29,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 2.276,
-        "battery_2": 2.724
+        "thermal_2": 40.0
       },
       "k": {
         "a3": {
-          "thermal_1": 7.724,
-          "battery_1": 2.276
+          "thermal_2": 10.0
         },
         "p5": {
-          "thermal_1": 9.0
+          "thermal_2": 9.0
         }
       },
-      "sell": 61.0,
+      "sell": 96.0,
       "day_ahead_commit": 61.0,
       "soc": {
-        "battery_1": 26.1755,
-        "battery_2": 10.1208
+        "battery_1": 41.4592,
+        "battery_2": 10.1209
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1050,7 +1052,7 @@
       "t": 30,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 5.0
+        "thermal_2": 40.0
       },
       "k": {
         "a3": {
@@ -1060,11 +1062,11 @@
           "thermal_1": 9.0
         }
       },
-      "sell": 61.0,
+      "sell": 96.0,
       "day_ahead_commit": 61.0,
       "soc": {
-        "battery_1": 20.6883,
-        "battery_2": 10.1006
+        "battery_1": 41.3763,
+        "battery_2": 10.1007
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1082,25 +1084,23 @@
       "t": 31,
       "P": {
         "thermal_1": 75.0,
-        "thermal_2": 20.0,
+        "thermal_2": 40.0,
         "pv_1": 1.104,
         "pv_2": 1.472
       },
       "k": {
         "p5": {
-          "thermal_2": 7.528,
-          "pv_2": 1.472
+          "thermal_2": 9.0
         },
         "a4": {
-          "thermal_1": 2.528,
-          "thermal_2": 12.472
+          "thermal_2": 15.0
         }
       },
-      "sell": 73.576,
+      "sell": 93.576,
       "day_ahead_commit": 58.576,
       "soc": {
-        "battery_1": 20.647,
-        "battery_2": 10.0804
+        "battery_1": 41.2935,
+        "battery_2": 10.0805
       },
       "pv_forecast": {
         "pv_1": 0.02,
@@ -1120,7 +1120,8 @@
         "thermal_1": 75.0,
         "thermal_2": 40.0,
         "pv_1": 4.416,
-        "pv_2": 5.888
+        "pv_2": 5.888,
+        "battery_1": 0.0001
       },
       "k": {
         "a2": {
@@ -1128,11 +1129,11 @@
           "pv_1": 4.416
         }
       },
-      "sell": 113.304,
+      "sell": 113.3041,
       "day_ahead_commit": 98.1603,
       "soc": {
-        "battery_1": 20.6057,
-        "battery_2": 10.0602
+        "battery_1": 41.2108,
+        "battery_2": 10.0603
       },
       "pv_forecast": {
         "pv_1": 0.08,
@@ -1150,16 +1151,16 @@
       "t": 33,
       "P": {
         "thermal_1": 60.0,
-        "thermal_2": 40.0,
+        "thermal_2": 20.0,
         "pv_1": 8.832,
         "pv_2": 11.776
       },
       "k": {},
-      "sell": 120.608,
+      "sell": 100.608,
       "day_ahead_commit": 95.608,
       "soc": {
-        "battery_1": 20.5645,
-        "battery_2": 10.0401
+        "battery_1": 41.1284,
+        "battery_2": 10.0402
       },
       "pv_forecast": {
         "pv_1": 0.16,
@@ -1177,41 +1178,38 @@
       "t": 34,
       "P": {
         "thermal_1": 45.0,
-        "thermal_2": 20.0,
         "pv_1": 6.066,
-        "pv_2": 7.688
+        "pv_2": 7.688,
+        "battery_1": 10.246
       },
       "k": {
         "p6": {
-          "thermal_1": 11.0,
-          "pv_2": 7.0
-        },
-        "p1": {
           "thermal_1": 18.0
         },
+        "p1": {
+          "thermal_1": 1.688,
+          "pv_1": 6.066,
+          "battery_1": 10.246
+        },
         "p3": {
-          "thermal_2": 6.0
+          "thermal_1": 6.0
         },
         "p4": {
-          "thermal_2": 4.934,
-          "pv_1": 6.066
+          "thermal_1": 11.0
         },
         "p8": {
-          "thermal_1": 9.0
+          "thermal_1": 1.312,
+          "pv_2": 7.688
         },
         "p9": {
           "thermal_1": 7.0
-        },
-        "battery_2_chg": {
-          "thermal_2": 9.066,
-          "pv_2": 0.688
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 20.5233,
-        "battery_2": 19.2863
+        "battery_1": 29.9092,
+        "battery_2": 10.0201
       },
       "pv_forecast": {
         "pv_1": 0.1,
@@ -1231,36 +1229,36 @@
         "thermal_1": 30.0,
         "pv_1": 15.456,
         "pv_2": 20.608,
-        "battery_2": 2.936
+        "battery_1": 2.936
       },
       "k": {
         "p6": {
-          "thermal_1": 18.0
+          "thermal_1": 12.0,
+          "pv_2": 6.0
         },
         "p1": {
-          "pv_2": 15.064,
-          "battery_2": 2.936
+          "thermal_1": 18.0
         },
         "p3": {
-          "thermal_1": 6.0
+          "pv_2": 6.0
         },
         "p4": {
           "pv_1": 11.0
         },
         "p8": {
-          "thermal_1": 3.456,
-          "pv_2": 5.544
+          "pv_2": 6.064,
+          "battery_1": 2.936
         },
         "p9": {
-          "thermal_1": 2.544,
-          "pv_1": 4.456
+          "pv_1": 4.456,
+          "pv_2": 2.544
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 20.4823,
-        "battery_2": 16.0564
+        "battery_1": 26.6581,
+        "battery_2": 10.0001
       },
       "pv_forecast": {
         "pv_1": 0.28,
@@ -1285,22 +1283,22 @@
       },
       "k": {
         "p1": {
-          "thermal_1": 11.178,
-          "pv_1": 6.822
+          "thermal_1": 13.242,
+          "pv_1": 4.758
         },
         "p4": {
-          "thermal_1": 2.064,
+          "pv_1": 2.064,
           "pv_2": 8.936
         },
-        "battery_1_chg": {
+        "battery_2_chg": {
           "thermal_1": 1.758
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 22.1114,
-        "battery_2": 16.0243
+        "battery_1": 26.6048,
+        "battery_2": 11.6502
       },
       "pv_forecast": {
         "pv_1": 0.12,
@@ -1319,25 +1317,25 @@
       "P": {
         "pv_1": 8.832,
         "pv_2": 11.28,
-        "battery_1": 1.9018,
-        "battery_2": 4.4902
+        "battery_1": 6.0274,
+        "battery_2": 0.3646
       },
       "k": {
         "p1": {
-          "pv_2": 11.608,
-          "battery_1": 1.9018,
-          "battery_2": 4.4902
+          "pv_2": 11.776,
+          "battery_1": 6.0274,
+          "battery_2": 0.1966
         },
         "p5": {
           "pv_1": 8.832,
-          "pv_2": 0.168
+          "battery_2": 0.168
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
         "battery_1": 20.0,
-        "battery_2": 11.1116
+        "battery_2": 11.2306
       },
       "pv_forecast": {
         "pv_1": 0.16,
@@ -1359,21 +1357,18 @@
       },
       "k": {
         "p5": {
-          "pv_1": 4.416,
-          "pv_2": 4.584
+          "pv_1": 3.112,
+          "pv_2": 5.888
         },
         "battery_1_chg": {
-          "pv_2": 0.0421
-        },
-        "battery_2_chg": {
-          "pv_2": 1.2619
+          "pv_1": 1.304
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 20.0,
-        "battery_2": 12.2882
+        "battery_1": 21.1988,
+        "battery_2": 11.2081
       },
       "pv_forecast": {
         "pv_1": 0.08,
@@ -1395,21 +1390,18 @@
       },
       "k": {
         "p5": {
-          "pv_1": 6.3779,
-          "pv_2": 2.6221
+          "pv_2": 9.0
         },
         "battery_1_chg": {
-          "pv_1": 0.0421
-        },
-        "battery_2_chg": {
-          "pv_2": 8.5939
+          "pv_1": 6.42,
+          "pv_2": 2.216
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 20.0,
-        "battery_2": 20.4278
+        "battery_1": 29.3606,
+        "battery_2": 11.1857
       },
       "pv_forecast": {
         "pv_1": 0.13,
@@ -1432,21 +1424,19 @@
       },
       "k": {
         "p2": {
-          "thermal_1": 12.0
-        },
-        "battery_1_chg": {
+          "thermal_1": 1.696,
           "pv_1": 4.416,
           "pv_2": 5.888
         },
         "battery_2_chg": {
-          "thermal_1": 3.0
+          "thermal_1": 13.304
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 29.7488,
-        "battery_2": 23.237
+        "battery_1": 29.3019,
+        "battery_2": 23.8021
       },
       "pv_forecast": {
         "pv_1": 0.08,
@@ -1469,22 +1459,22 @@
       },
       "k": {
         "p2": {
-          "thermal_1": 12.0
+          "thermal_1": 7.584,
+          "pv_2": 4.416
         },
         "battery_1_chg": {
-          "thermal_1": 10.728
+          "thermal_1": 20.0
         },
         "battery_2_chg": {
-          "thermal_1": 7.272,
-          "pv_1": 3.312,
-          "pv_2": 4.416
+          "thermal_1": 2.416,
+          "pv_1": 3.312
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 39.8809,
-        "battery_2": 37.4405
+        "battery_1": 48.2433,
+        "battery_2": 29.1961
       },
       "pv_forecast": {
         "pv_1": 0.06,
@@ -1510,25 +1500,22 @@
           "thermal_1": 12.0
         },
         "p6": {
-          "thermal_1": 14.076,
-          "pv_1": 3.924
+          "thermal_1": 18.0
         },
         "p7": {
-          "thermal_1": 5.32,
+          "thermal_1": 1.396,
+          "pv_1": 3.924,
           "pv_2": 4.68
         },
         "battery_1_chg": {
-          "thermal_1": 5.8757
-        },
-        "battery_2_chg": {
-          "thermal_1": 7.7283
+          "thermal_1": 13.604
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 45.3831,
-        "battery_2": 44.7075
+        "battery_1": 61.0706,
+        "battery_2": 29.1377
       },
       "pv_forecast": {
         "pv_1": 0.06,
@@ -1551,11 +1538,11 @@
       },
       "k": {
         "p2": {
-          "thermal_1": 11.264,
-          "pv_2": 0.736
+          "thermal_1": 12.0
         },
         "p6": {
-          "thermal_1": 18.0
+          "thermal_1": 17.264,
+          "pv_2": 0.736
         },
         "p7": {
           "thermal_1": 9.448,
@@ -1571,8 +1558,8 @@
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 64.2923,
-        "battery_2": 45.8417
+        "battery_1": 79.9485,
+        "battery_2": 30.3031
       },
       "pv_forecast": {
         "pv_1": 0.01,
@@ -1598,21 +1585,21 @@
         "p9": {
           "thermal_1": 7.0
         },
+        "a5": {
+          "thermal_1": 14.0
+        },
         "a6": {
-          "thermal_1": 13.0
+          "thermal_1": 26.0
         },
         "battery_1_chg": {
-          "thermal_1": 20.0
-        },
-        "battery_2_chg": {
-          "thermal_1": 15.0
+          "thermal_1": 17.7192
         }
       },
-      "sell": 10.0,
-      "day_ahead_commit": 42.4542,
+      "sell": 0.2808,
+      "day_ahead_commit": 22.4542,
       "soc": {
-        "battery_1": 83.1637,
-        "battery_2": 60
+        "battery_1": 96.6218,
+        "battery_2": 30.2425
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1624,35 +1611,36 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 467.3405
+      "cancellation_penalty": 319.297
     },
     {
       "t": 45,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 12.49,
-        "battery_2": 5.51
+        "battery_1": 14.7017,
+        "battery_2": 3.2983
       },
       "k": {
         "p7": {
-          "battery_1": 10.0
+          "battery_1": 6.7017,
+          "battery_2": 3.2983
         },
         "p9": {
           "thermal_1": 7.0
         },
-        "a6": {
-          "thermal_1": 13.0
-        },
         "a5": {
-          "thermal_1": 4.51,
-          "battery_1": 2.49
+          "thermal_1": 7.0
+        },
+        "a6": {
+          "thermal_1": 18.0,
+          "battery_1": 8.0
         }
       },
-      "sell": 56.0,
-      "day_ahead_commit": 56.0,
+      "sell": 43.0,
+      "day_ahead_commit": 43.0,
       "soc": {
-        "battery_1": 69.4213,
-        "battery_2": 53.8909
+        "battery_1": 80.4485,
+        "battery_2": 26.5969
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1670,23 +1658,18 @@
       "t": 46,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 5.0,
-        "battery_2": 15.0
+        "battery_1": 18.0
       },
       "k": {
         "a6": {
-          "thermal_1": 13.0
-        },
-        "a5": {
-          "thermal_1": 2.0,
-          "battery_1": 5.0
+          "thermal_1": 26.0
         }
       },
-      "sell": 75.0,
-      "day_ahead_commit": 75.0,
+      "sell": 67.0,
+      "day_ahead_commit": 67.0,
       "soc": {
-        "battery_1": 63.8477,
-        "battery_2": 37.4787
+        "battery_1": 60.7224,
+        "battery_2": 26.5437
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1723,8 +1706,8 @@
       "sell": 30.0,
       "day_ahead_commit": 30.0,
       "soc": {
-        "battery_1": 56.1113,
-        "battery_2": 37.4038
+        "battery_1": 52.9922,
+        "battery_2": 26.4906
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1742,35 +1725,33 @@
       "t": 48,
       "P": {
         "thermal_1": 75.0,
-        "battery_1": 2.0346,
-        "battery_2": 10.0837
+        "battery_1": 4.1909,
+        "battery_2": 0.4353
       },
       "k": {
         "p6": {
           "thermal_1": 18.0
         },
-        "a5": {
-          "battery_1": 2.0346,
-          "battery_2": 4.9654
-        },
         "p5": {
-          "thermal_1": 9.0
+          "thermal_1": 8.5647,
+          "battery_2": 0.4353
         },
         "p1": {
-          "thermal_1": 18.0
+          "thermal_1": 13.8091,
+          "battery_1": 4.1909
         },
         "p4": {
           "thermal_1": 11.0
         },
         "s4": {
-          "thermal_1": 10.0
+          "thermal_1": 20.0
         }
       },
-      "sell": 14.1183,
-      "day_ahead_commit": 17.0,
+      "sell": 3.6261,
+      "day_ahead_commit": 14.0,
       "soc": {
-        "battery_1": 53.7875,
-        "battery_2": 26.3684
+        "battery_1": 48.3309,
+        "battery_2": 25.9644
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1782,7 +1763,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 68.2963
+      "cancellation_penalty": 245.8614
     },
     {
       "t": 49,
@@ -1797,8 +1778,8 @@
       "sell": 66.0,
       "day_ahead_commit": 66.0,
       "soc": {
-        "battery_1": 53.68,
-        "battery_2": 26.3157
+        "battery_1": 48.2342,
+        "battery_2": 25.9125
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1815,22 +1796,14 @@
     {
       "t": 50,
       "P": {
-        "thermal_1": 75.0,
-        "battery_1": 1.4654,
-        "battery_2": 0.9074
+        "thermal_1": 75.0
       },
-      "k": {
-        "a7": {
-          "thermal_1": 6.6273,
-          "battery_1": 1.4654,
-          "battery_2": 0.9074
-        }
-      },
-      "sell": 68.3727,
-      "day_ahead_commit": 71.0,
+      "k": {},
+      "sell": 75.0,
+      "day_ahead_commit": 75.0,
       "soc": {
-        "battery_1": 51.9798,
-        "battery_2": 25.2768
+        "battery_1": 48.1378,
+        "battery_2": 25.8607
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1842,7 +1815,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 65.4198
+      "cancellation_penalty": 0.0
     },
     {
       "t": 51,
@@ -1854,15 +1827,15 @@
         "s4": {
           "thermal_1": 20.0
         },
-        "battery_1_chg": {
+        "battery_2_chg": {
           "thermal_1": 5.0
         }
       },
       "sell": 70.0,
       "day_ahead_commit": 70.0,
       "soc": {
-        "battery_1": 56.6258,
-        "battery_2": 25.2262
+        "battery_1": 48.0415,
+        "battery_2": 30.559
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1883,9 +1856,6 @@
         "thermal_2": 40.0
       },
       "k": {
-        "s4": {
-          "thermal_1": 10.0
-        },
         "battery_1_chg": {
           "thermal_1": 20.0
         },
@@ -1893,11 +1863,11 @@
           "thermal_1": 15.0
         }
       },
-      "sell": 70.0,
-      "day_ahead_commit": 70.0,
+      "sell": 80.0,
+      "day_ahead_commit": 75.0,
       "soc": {
-        "battery_1": 75.5126,
-        "battery_2": 39.4258
+        "battery_1": 66.9454,
+        "battery_2": 44.7478
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1918,28 +1888,25 @@
         "thermal_2": 40.0
       },
       "k": {
-        "a7": {
-          "thermal_2": 18.0
-        },
         "p5": {
-          "thermal_2": 9.0
+          "thermal_1": 2.0,
+          "thermal_2": 7.0
         },
         "p1": {
-          "thermal_1": 16.0,
-          "thermal_2": 2.0
+          "thermal_2": 18.0
         },
         "battery_1_chg": {
-          "thermal_2": 11.0
+          "thermal_1": 20.0
         },
         "battery_2_chg": {
-          "thermal_1": 15.0
+          "thermal_2": 15.0
         }
       },
-      "sell": 44.0,
-      "day_ahead_commit": 44.0,
+      "sell": 53.0,
+      "day_ahead_commit": 48.0,
       "soc": {
         "battery_1": 85.8115,
-        "battery_2": 53.5969
+        "battery_2": 58.9084
       },
       "pv_forecast": {
         "pv_1": 0.0,
@@ -1962,25 +1929,22 @@
         "pv_2": 0.712
       },
       "k": {
-        "a7": {
-          "thermal_1": 8.406,
+        "p5": {
+          "thermal_2": 9.0
+        },
+        "battery_1_chg": {
+          "thermal_2": 4.6198,
           "pv_1": 0.594
         },
-        "p5": {
-          "thermal_1": 9.0
-        },
-        "a6": {
-          "thermal_1": 13.0
-        },
         "battery_2_chg": {
-          "thermal_1": 6.018
+          "thermal_2": 1.2731
         }
       },
-      "sell": 79.288,
-      "day_ahead_commit": 79.288,
+      "sell": 100.8191,
+      "day_ahead_commit": 87.288,
       "soc": {
-        "battery_1": 85.6399,
-        "battery_2": 59.2068
+        "battery_1": 90.593,
+        "battery_2": 60.0
       },
       "pv_forecast": {
         "pv_1": 0.01,
@@ -2001,27 +1965,23 @@
         "thermal_2": 40.0,
         "pv_1": 7.728,
         "pv_2": 10.304,
-        "battery_1": 19.9629,
-        "battery_2": 14.9971
+        "battery_1": 20.0,
+        "battery_2": 15.0
       },
       "k": {
-        "a7": {
-          "thermal_1": 1.272,
-          "pv_1": 7.728
-        },
         "p5": {
-          "battery_1": 9.0
+          "battery_2": 9.0
         },
-        "a6": {
-          "thermal_1": 2.0371,
-          "battery_1": 10.9629
+        "a7": {
+          "pv_1": 7.728,
+          "battery_2": 1.272
         }
       },
-      "sell": 136.992,
-      "day_ahead_commit": 150.6655,
+      "sell": 150.032,
+      "day_ahead_commit": 158.6655,
       "soc": {
-        "battery_1": 63.7698,
-        "battery_2": 42.7872
+        "battery_1": 68.6727,
+        "battery_2": 43.5756
       },
       "pv_forecast": {
         "pv_1": 0.14,
@@ -2033,7 +1993,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 385.5927
+      "cancellation_penalty": 243.4647
     },
     {
       "t": 56,
@@ -2045,20 +2005,12 @@
         "battery_1": 20.0,
         "battery_2": 15.0
       },
-      "k": {
-        "a7": {
-          "pv_1": 9.0
-        },
-        "a6": {
-          "pv_1": 10.32,
-          "pv_2": 2.68
-        }
-      },
-      "sell": 173.08,
-      "day_ahead_commit": 192.08,
+      "k": {},
+      "sell": 195.08,
+      "day_ahead_commit": 195.08,
       "soc": {
-        "battery_1": 41.9032,
-        "battery_2": 26.3973
+        "battery_1": 46.7962,
+        "battery_2": 27.1841
       },
       "pv_forecast": {
         "pv_1": 0.35,
@@ -2070,7 +2022,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 598.5
+      "cancellation_penalty": 0.0
     },
     {
       "t": 57,
@@ -2086,8 +2038,8 @@
       "sell": 223.416,
       "day_ahead_commit": 223.416,
       "soc": {
-        "battery_1": 20.0802,
-        "battery_2": 10.0401
+        "battery_1": 24.9635,
+        "battery_2": 10.8254
       },
       "pv_forecast": {
         "pv_1": 0.57,
@@ -2104,14 +2056,19 @@
     {
       "t": 58,
       "P": {
-        "thermal_1": 60.0,
+        "thermal_1": 75.0,
         "thermal_2": 40.0,
         "pv_1": 48.018,
         "pv_2": 65.52,
-        "battery_2": 0.0
+        "battery_1": 4.4836,
+        "battery_2": 0.721
       },
-      "k": {},
-      "sell": 213.538,
+      "k": {
+        "a7": {
+          "thermal_1": 9.0
+        }
+      },
+      "sell": 224.7426,
       "day_ahead_commit": 214.3,
       "soc": {
         "battery_1": 20.0401,
@@ -2127,34 +2084,31 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 20.8026
+      "cancellation_penalty": 0.0
     },
     {
       "t": 59,
       "P": {
-        "thermal_1": 45.0,
+        "thermal_1": 60.0,
         "thermal_2": 20.0,
         "pv_1": 52.992,
         "pv_2": 70.656
       },
       "k": {
         "p1": {
-          "pv_1": 18.0
+          "thermal_1": 18.0
         },
         "p6": {
-          "pv_1": 18.0
+          "thermal_1": 18.0
         },
         "p4": {
-          "pv_1": 11.0
-        },
-        "battery_1_chg": {
-          "thermal_2": 0.0
+          "thermal_1": 11.0
         }
       },
-      "sell": 141.648,
+      "sell": 156.648,
       "day_ahead_commit": 141.648,
       "soc": {
-        "battery_1": 20,
+        "battery_1": 20.0,
         "battery_2": 10.0
       },
       "pv_forecast": {
@@ -2172,11 +2126,14 @@
     {
       "t": 60,
       "P": {
-        "thermal_1": 30.0,
+        "thermal_1": 45.0,
         "pv_1": 53.01,
         "pv_2": 77.072
       },
       "k": {
+        "a7": {
+          "pv_2": 18.0
+        },
         "p6": {
           "pv_2": 18.0
         },
@@ -2184,17 +2141,17 @@
           "pv_2": 11.0
         },
         "battery_1_chg": {
-          "pv_2": 0.0421
+          "thermal_1": 0.0421
         },
         "battery_2_chg": {
-          "pv_2": 3.8791
+          "pv_2": 5.1562
         }
       },
-      "sell": 127.1608,
-      "day_ahead_commit": 127.1608,
+      "sell": 122.8837,
+      "day_ahead_commit": 118.1608,
       "soc": {
-        "battery_1": 20,
-        "battery_2": 13.6652
+        "battery_1": 20.0,
+        "battery_2": 14.8784
       },
       "pv_forecast": {
         "pv_1": 0.98,
@@ -2211,33 +2168,36 @@
     {
       "t": 61,
       "P": {
-        "thermal_1": 15.0,
+        "thermal_1": 30.0,
         "pv_1": 60.0,
         "pv_2": 80.0
       },
       "k": {
         "a7": {
-          "pv_2": 9.0
+          "pv_1": 18.0
         },
         "p5": {
-          "pv_2": 9.0
+          "pv_1": 9.0
         },
         "a8": {
-          "thermal_1": 11.0
+          "pv_1": 11.0
+        },
+        "s5": {
+          "pv_1": 14.0
         },
         "battery_1_chg": {
-          "pv_2": 20.0
+          "thermal_1": 20.0
         },
         "battery_2_chg": {
-          "thermal_1": 4.0,
-          "pv_2": 11.0
+          "thermal_1": 7.0,
+          "pv_1": 8.0
         }
       },
-      "sell": 91.0,
+      "sell": 83.0,
       "day_ahead_commit": 96.7855,
       "soc": {
         "battery_1": 38.96,
-        "battery_2": 27.8878
+        "battery_2": 29.0987
       },
       "pv_forecast": {
         "pv_1": 1.0,
@@ -2248,53 +2208,60 @@
         "pv_2": 1.0
       },
       "missed_aperiodic": [],
-      "rejected_sporadic": [],
-      "cancellation_penalty": 43.3912
+      "rejected_sporadic": [
+        "s5"
+      ],
+      "cancellation_penalty": 103.3912
     },
     {
       "t": 62,
       "P": {
+        "thermal_1": 15.0,
         "pv_1": 47.094,
         "pv_2": 80.0
       },
       "k": {
         "a7": {
-          "pv_1": 9.0
+          "thermal_1": 9.0
         },
         "p5": {
-          "pv_2": 9.0
+          "pv_1": 9.0
         },
         "a8": {
-          "pv_2": 11.0
+          "pv_1": 11.0
+        },
+        "s5": {
+          "pv_2": 14.0
         },
         "p6": {
-          "pv_1": 12.094,
-          "pv_2": 5.906
+          "pv_1": 18.0
         },
         "p3": {
           "pv_2": 6.0
         },
         "p7": {
-          "pv_1": 10.0
+          "pv_2": 10.0
         },
         "p8": {
-          "pv_1": 9.0
+          "pv_2": 9.0
         },
         "p9": {
-          "pv_1": 7.0
+          "pv_2": 7.0
         },
         "battery_1_chg": {
-          "pv_2": 20.0
+          "thermal_1": 0.094,
+          "pv_2": 19.906
         },
         "battery_2_chg": {
-          "pv_2": 15.0
+          "thermal_1": 5.906,
+          "pv_1": 9.094
         }
       },
-      "sell": 13.094,
+      "sell": 14.094,
       "day_ahead_commit": 8.36,
       "soc": {
         "battery_1": 57.8821,
-        "battery_2": 42.0821
+        "battery_2": 43.2905
       },
       "pv_forecast": {
         "pv_1": 0.95,
@@ -2328,27 +2295,27 @@
           "pv_2": 6.0
         },
         "p7": {
-          "pv_2": 10.0
+          "pv_1": 6.16,
+          "pv_2": 3.84
         },
         "p8": {
-          "pv_1": 4.12,
-          "pv_2": 4.88
+          "pv_2": 9.0
         },
         "p1": {
           "pv_2": 18.0
         },
         "battery_1_chg": {
-          "pv_1": 7.04
+          "pv_1": 20.0
         },
         "battery_2_chg": {
-          "pv_1": 15.0
+          "pv_2": 2.04
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 64.4543,
-        "battery_2": 56.2479
+        "battery_1": 76.7663,
+        "battery_2": 45.1419
       },
       "pv_forecast": {
         "pv_1": 0.8,
@@ -2370,33 +2337,33 @@
       },
       "k": {
         "a8": {
-          "pv_2": 11.0
+          "pv_1": 0.331,
+          "pv_2": 10.669
         },
         "p7": {
-          "pv_2": 10.0
+          "pv_1": 10.0
         },
         "p9": {
           "pv_2": 7.0
         },
         "p1": {
-          "pv_1": 15.3969,
-          "pv_2": 2.6031
+          "pv_1": 18.0
         },
         "p2": {
           "pv_2": 12.0
         },
         "battery_1_chg": {
-          "pv_1": 17.7231
+          "pv_1": 4.789
         },
         "battery_2_chg": {
-          "pv_2": 1.5569
+          "pv_2": 14.491
         }
       },
       "sell": 0.0,
       "day_ahead_commit": 0.0,
       "soc": {
-        "battery_1": 81.1624,
-        "battery_2": 57.6144
+        "battery_1": 81.1623,
+        "battery_2": 58.8181
       },
       "pv_forecast": {
         "pv_1": 0.6,
@@ -2429,18 +2396,17 @@
         },
         "battery_1_chg": {
           "thermal_1": 15.0,
-          "pv_1": 1.4084,
-          "pv_2": 3.5916
+          "pv_2": 5.0
         },
         "battery_2_chg": {
-          "pv_2": 2.6324
+          "pv_1": 1.368
         }
       },
-      "sell": 3.6796,
+      "sell": 4.944,
       "day_ahead_commit": 0.0,
       "soc": {
         "battery_1": 100,
-        "battery_2": 60.0
+        "battery_2": 60
       },
       "pv_forecast": {
         "pv_1": 0.36,
@@ -2463,21 +2429,24 @@
       },
       "k": {
         "p1": {
-          "thermal_1": 17.7895,
-          "pv_2": 0.2105
+          "thermal_1": 18.0
         },
         "p2": {
           "thermal_1": 12.0
         },
+        "a7": {
+          "pv_2": 9.0
+        },
         "battery_1_chg": {
-          "thermal_1": 0.2105
+          "pv_1": 0.1208,
+          "pv_2": 0.0897
         },
         "battery_2_chg": {
-          "pv_1": 0.1263
+          "pv_2": 0.1263
         }
       },
-      "sell": 17.0932,
-      "day_ahead_commit": 15.1192,
+      "sell": 8.0932,
+      "day_ahead_commit": 6.1192,
       "soc": {
         "battery_1": 100.0,
         "battery_2": 60.0
@@ -2504,14 +2473,15 @@
       },
       "k": {
         "p2": {
-          "thermal_1": 12.0
+          "thermal_2": 11.448,
+          "pv_1": 0.552
         },
         "p4": {
-          "thermal_1": 10.264,
-          "pv_2": 0.736
+          "thermal_1": 2.448,
+          "thermal_2": 8.552
         },
         "battery_2_chg": {
-          "thermal_1": 0.0
+          "thermal_2": 0.0
         }
       },
       "sell": 43.288,
@@ -2571,17 +2541,9 @@
         "battery_1": 20.0,
         "battery_2": 15.0
       },
-      "k": {
-        "s5": {
-          "thermal_2": 13.0,
-          "battery_2": 15.0
-        },
-        "a9": {
-          "thermal_2": 5.0
-        }
-      },
-      "sell": 117.0,
-      "day_ahead_commit": 141.0,
+      "k": {},
+      "sell": 150.0,
+      "day_ahead_commit": 150.0,
       "soc": {
         "battery_1": 63.7295,
         "battery_2": 42.767
@@ -2596,7 +2558,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 741.6
+      "cancellation_penalty": 0.0
     },
     {
       "t": 70,
@@ -2607,15 +2569,15 @@
         "battery_2": 15.0
       },
       "k": {
-        "s5": {
-          "thermal_1": 28.0
-        },
         "p5": {
-          "thermal_1": 9.0
+          "battery_1": 9.0
+        },
+        "a9": {
+          "battery_1": 10.0
         }
       },
-      "sell": 113.0,
-      "day_ahead_commit": 137.0,
+      "sell": 131.0,
+      "day_ahead_commit": 141.0,
       "soc": {
         "battery_1": 41.8629,
         "battery_2": 26.3771
@@ -2630,7 +2592,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 813.6
+      "cancellation_penalty": 339.0
     },
     {
       "t": 71,
@@ -2641,21 +2603,17 @@
         "battery_2": 15.0
       },
       "k": {
-        "a9": {
-          "battery_2": 5.0
-        },
         "p5": {
-          "thermal_1": 9.0
+          "thermal_2": 9.0
         },
         "p6": {
-          "thermal_1": 8.0,
-          "battery_2": 10.0
+          "thermal_2": 18.0
         },
         "p3": {
-          "thermal_1": 6.0
+          "thermal_2": 6.0
         }
       },
-      "sell": 112.0,
+      "sell": 117.0,
       "day_ahead_commit": 117.0,
       "soc": {
         "battery_1": 20.0401,
@@ -2671,7 +2629,7 @@
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
-      "cancellation_penalty": 154.5
+      "cancellation_penalty": 0.0
     },
     {
       "t": 72,
