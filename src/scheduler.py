@@ -557,12 +557,15 @@ class SlackAbsorber:
                 continue
             p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
                       else float(gd.get("initial_energy", 0))) # 前一小時的輸出
-            p_next = (self.schedule[t]["P"].get(g, 0.0)
-                      if t < len(self.schedule) else p_curr) # 當前的輸出
+            # ramp_down boundary removed in slack_at() intentionally: this
+            # function is used for feasibility screening only. The actual
+            # commit is done by commit_at() (which retains ramp_down guard)
+            # or _commit_run_min_sell LP (which enforces ramp across the run).
+            # Removing it here allows _find_min_cost to consider hours that
+            # are genuinely feasible when handled by the multi-hour LP path.
             max_new = min(
                 float(gd["output_max"]),
                 p_prev + gd["ramp_up_rate"],
-                p_next + gd["ramp_down_rate"],
             )
             s += max(0.0, max_new - p_curr) # 發電機的剩餘可用產能
         for pv in self.pv_ids:
@@ -614,12 +617,13 @@ class SlackAbsorber:
                     continue
                 p_prev = (self.schedule[t - 2]["P"].get(g, 0.0) if t > 1
                           else float(gd.get("initial_energy", 0)))
-                p_next = (self.schedule[t]["P"].get(g, 0.0)
-                          if t < len(self.schedule) else p_curr)
+                # ramp_down bound removed: _cascade_sell propagates any raise
+                # to subsequent ON-hours so ramp_down feasibility is maintained
+                # there. Raises blocked by an imminent OFF hour are physically
+                # irrecoverable; _cascade_sell stops at the OFF hour boundary.
                 max_new = min(
                     float(gd["output_max"]),
                     p_prev + gd["ramp_up_rate"],
-                    p_next + gd["ramp_down_rate"],
                 )
                 avail = max_new - p_curr
                 if avail <= EPS:
@@ -628,6 +632,7 @@ class SlackAbsorber:
                 rec["P"][g] = round(p_curr + take, 4)
                 allocation[g] = round(allocation.get(g, 0) + take, 4)
                 remaining -= take
+                self._cascade_sell(g, t, rec["P"][g])
 
         # Step 3: ramp PVs
         if remaining > EPS:
@@ -654,6 +659,36 @@ class SlackAbsorber:
         else:
             rec["k"][target_jid] = clean
         return remaining
+
+    def _cascade_sell(self, g, t_raised, new_p):
+        """After raising P[g, t_raised] to new_p, propagate the increase
+        to subsequent hours via sell to maintain ramp_down feasibility.
+        When a scheduled-OFF hour is reached the generator is turned ON
+        (output attributed to sell) so the ramp_down chain can continue.
+        Stops when the ramp_down requirement drops to zero or is already met."""
+        gd = self.gens[g]
+        rd = float(gd["ramp_down_rate"])
+        out_max = float(gd["output_max"])
+        out_min = float(gd.get("output_min", 0.0))
+        t = t_raised + 1
+        p_prev = new_p
+        while t <= H:
+            min_needed = p_prev - rd
+            if min_needed <= EPS:
+                break  # ramp_down satisfied — cascade complete
+            rec = self.schedule[t - 1]
+            p_curr = rec["P"].get(g, 0.0)
+            if p_curr >= min_needed - EPS:
+                break  # already ramp_down-feasible at this hour
+            # Raise generator; for an OFF hour enforce output_min floor
+            new_p_t = min(out_max, max(out_min if p_curr <= EPS else 0.0, min_needed))
+            extra = new_p_t - p_curr
+            if extra <= EPS:
+                break
+            rec["P"][g] = round(new_p_t, 4)
+            rec["sell"] = round(rec["sell"] + extra, 4)
+            p_prev = new_p_t
+            t += 1
 
 
 # =============================================================================
@@ -850,12 +885,13 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                     # Adjacent-hour ramp_up: (P[t]+dx[t]) - (P[tp]+dx[tp]) <= ru
                     prob += ((p_curr + dx[g][t]) - (p_prev_curr + dx[g][tp])
                              <= ru), f"ru_{g}_{t}"
-                # ramp_down at t (toward t+1)
+                # ramp_down at t (toward t+1).
+                # Boundary constraint at T_last is omitted: after the LP
+                # solution is applied, _cascade_sell propagates any raise at
+                # T_last to subsequent ON-hours via sell, maintaining
+                # ramp_down feasibility outside the run window.
                 if idx == len(T) - 1:
-                    p_next = (schedule[t]["P"].get(g, 0.0)
-                              if t < len(schedule) else p_curr)
-                    # (P[t]+dx[t]) - P[t+1] <= rd  →  dx[t] <= rd + P[t+1] - P[t]
-                    prob += p_curr + dx[g][t] - p_next <= rd, f"rd_{g}_{t}"
+                    pass  # cascade handles post-run ramp_down
                 else:
                     tn = T[idx + 1]
                     p_next_curr = schedule[tn - 1]["P"].get(g, 0.0)
@@ -933,6 +969,15 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                     to_dist -= give
                 if to_dist <= EPS:
                     break
+
+        # Cascade ramp_down from the last run hour to subsequent ON-hours.
+        # For each generator raised at T[-1], propagate the new P level
+        # forward so the static schedule hours after the run are ramp_down
+        # feasible; extra generation at those hours is attributed to sell.
+        T_last = T[-1]
+        for g in absorber.gen_ids:
+            new_p_last = schedule[T_last - 1]["P"].get(g, 0.0)
+            absorber._cascade_sell(g, T_last, new_p_last)
 
         return total_sell_borrowed
 
