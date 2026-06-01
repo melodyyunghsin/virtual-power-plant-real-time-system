@@ -13,25 +13,11 @@
 
 無其他外部套件需求；`json`、`math`、`random`、`copy`、`pathlib` 等皆為 Python 標準函式庫。
 
----
-
-## 2. 程式編譯方式與環境設定
-
-本專案為純 Python，**無需編譯**。建議使用虛擬環境：
-
-```bash
-# 建立虛擬環境
-python3 -m venv venv
-source venv/bin/activate          # macOS / Linux
-# venv\Scripts\activate           # Windows
-
-# 安裝相依套件
-pip install pulp
-```
+安裝套件：`pip install pulp`
 
 ---
 
-## 3. 程式執行流程
+## 2. 程式執行流程
 
 依下列順序執行四個主程式即可重現所有提交的 JSON 輸出。所有指令請在專案根目錄下執行。
 
@@ -77,9 +63,9 @@ python3 src/verifier_advanced.py
 
 ---
 
-## 4. 各程式輸入與輸出檔案說明
+## 3. 各程式輸入與輸出檔案說明
 
-### 4.1 src/task_generator.py — Periodic task set 產生程式
+### 3.1 src/task_generator.py — Periodic task set 產生程式
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -89,7 +75,7 @@ python3 src/verifier_advanced.py
 | --- | --- |
 | `output/task_set.json` | Periodic task 集合 (含 r, p, e, d, w, preempt) |
 
-### 4.2 src/scheduler.py — Level 1 日前靜態排程
+### 3.2 src/scheduler.py — Level 1 日前靜態排程
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -107,7 +93,7 @@ python3 src/verifier_advanced.py
 - **Phase 1**：使用 PuLP CBC 解 ILP，僅處理 periodic tasks。目標函式為 minimize α·f1 + f2 + f3。
 - **Online Phase**：依 release time 排序，逐一處理 sporadic (acceptance test) 與 aperiodic (force-place per C4)。連續時段以 joint LP 求最小化售電損失 + 機組變動成本。
 
-### 4.3 src/evaluator.py — Level 1 效能評估
+### 3.3 src/evaluator.py — Level 1 效能評估
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -120,7 +106,7 @@ python3 src/verifier_advanced.py
 | --- | --- |
 | `output/evaluation_results.json` | 評估指標：miss rate、tardiness、response time、jitter、objective value 等 |
 
-### 4.4 src/advanced_scheduler.py — Level 2 動態排程
+### 3.4 src/advanced_scheduler.py — Level 2 動態排程
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -143,7 +129,7 @@ python3 src/verifier_advanced.py
 - 滾動 ILP 只重新優化 dispatch (P, sell, gen on/off, battery)；工作的時段分配自到達時即鎖定。
 - 每小時結算時若實際 sell 低於 day-ahead 承諾，累積取消售電 penalty。
 
-### 4.5 src/evaluator_advanced.py — Level 2 完整效能評估
+### 3.5 src/evaluator_advanced.py — Level 2 完整效能評估
 
 `advanced_scheduler.py` 在動態排程結束時會輸出一個精簡版的 `evaluation_results_advanced.json`（僅包含 miss rate、generator_cost、market_revenue、cancellation_penalty、objective_value、vs_static 等核心欄位）。為符合 spec Appendix H 對評估指標完整性的要求，請於 Step 4 之後再執行本程式，覆寫為含全部欄位的版本。
 
@@ -159,7 +145,7 @@ python3 src/verifier_advanced.py
 | --- | --- |
 | `output/evaluation_results_advanced.json` | 完整 L2 評估指標，含 tardiness / response time / jitter / post_acceptance_violation_rate / relaxed_assumptions |
 
-### 4.6 src/verifier.py / verifier_advanced.py — 限制式驗證
+### 3.6 src/verifier.py / verifier_advanced.py — 限制式驗證
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -174,15 +160,12 @@ python3 src/verifier_advanced.py
 
 ---
 
-## 5. 如何重現繳交的 output JSON
+## 4. 如何重現繳交的 output JSON
 
 完整重現流程：
 
 ```bash
 cd virtual-power-plant-real-time-system
-
-# (建議) 啟用虛擬環境
-source venv/bin/activate
 
 # 依序執行
 python3 src/task_generator.py
@@ -217,7 +200,7 @@ output/
 
 ---
 
-## 6. 專案結構
+## 5. 專案結構
 
 ```
 virtual-power-plant-real-time-system/
