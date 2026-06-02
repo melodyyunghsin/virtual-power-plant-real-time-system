@@ -25,8 +25,6 @@
 - Frame 限制式 `2f − gcd(f, p_j) ≤ d_j` (規格 1-8)
 - 整體 workload density `D_w ≥ 0.7` (規格 1-5)
 
-支援 CLI 指定 `seed` 與 `target_f`，方便重現特定 task set 或測試不同 frame size 配置。
-
 ### 1.2 數值約束處理
 
 | 規格項 | 條件 | 處理方式 |
