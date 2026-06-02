@@ -1,45 +1,45 @@
 {
   "hard_deadline_miss_rate": 0.0,
   "soft_deadline_miss_rate": 0.0,
-  "generator_cost": 302350.0,
-  "market_revenue": 354911.89,
-  "cancellation_penalty": 4222.42,
-  "net_market_revenue": 350689.47,
-  "objective_value": -52561.89,
+  "generator_cost": 303300.0,
+  "market_revenue": 353876.27,
+  "cancellation_penalty": 3421.21,
+  "net_market_revenue": 350455.06,
+  "objective_value": -50576.27,
   "acceptance_test": {
-    "total": 5,
+    "total": 6,
     "accepted": 4,
-    "rejected": 1
+    "rejected": 2
   },
-  "sporadic_value_rate": 0.9,
+  "sporadic_value_rate": 0.6428571428571429,
   "advanced_scheduler": {
     "method": "Event-Triggered Rolling Horizon",
     "window_size": 12,
     "replan_interval": 6,
     "deviation_threshold": 0.07,
-    "total_replans": 27,
+    "total_replans": 29,
     "replan_failures": 0,
     "replan_triggers": {
       "pv_deviation": 7,
       "sporadic_arrival": 4,
       "periodic_6h": 12,
-      "aperiodic_arrival": 9
+      "aperiodic_arrival": 10
     },
-    "total_cancellation_penalty": 4222.42,
+    "total_cancellation_penalty": 3421.21,
     "vs_static": {
-      "objective_value_static": -73328.8,
-      "objective_value_dynamic": -52561.89,
-      "generator_cost_static": 280530.0,
-      "generator_cost_dynamic": 302350.0,
-      "generator_cost_change": 21820.0,
-      "market_revenue_static": 353858.8,
-      "market_revenue_dynamic": 354911.89,
-      "market_revenue_change": 1053.09,
-      "cancellation_penalty_total": 4222.42,
+      "objective_value_static": -66479.4,
+      "objective_value_dynamic": -50576.27,
+      "generator_cost_static": 282070.0,
+      "generator_cost_dynamic": 303300.0,
+      "generator_cost_change": 21230.0,
+      "market_revenue_static": 348549.4,
+      "market_revenue_dynamic": 353876.27,
+      "market_revenue_change": 5326.87,
+      "cancellation_penalty_total": 3421.21,
       "soft_miss_rate_static": 0.0,
       "soft_miss_rate_dynamic": 0.0,
-      "sporadic_value_rate_static": 0.9,
-      "sporadic_value_rate_dynamic": 0.9
+      "sporadic_value_rate_static": 0.8571428571428571,
+      "sporadic_value_rate_dynamic": 0.6428571428571429
     }
   }
 }

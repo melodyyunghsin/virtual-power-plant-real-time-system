@@ -630,67 +630,163 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
     absorber = SlackAbsorber(schedule, proc, pv_forecast)
     H_local = len(schedule)
 
-    def _battery_avail(t, b):
+    def _battery_avail(t, b, comp_after=None):
         """Max additional MWh of discharge from battery `b` at hour `t`,
-        respecting:
-          - C14   new_dis ≤ discharge_max
-          - C19   not currently charging at hour t (mutex)
-          - C17   post-shift SOC[s] ≥ soc_min for ALL s ≥ t
-                  (discharging more at t shifts the entire SOC trajectory
-                   from t onward down by Δ in L1 ideal dynamics)
+        respecting C14, C17, C19.
+
+        Discharging Δ at t shifts SOC[s] down by Δ for all s ≥ t. We can
+        partially compensate by adding ε to chg[s*] at a future non-
+        discharging hour s* > `comp_after` (default: t). The compensation
+        siphons sell[s*] → chg[s*]. The reason for `comp_after`: when
+        committing multiple slots of the same job, we must avoid sharing
+        the same comp hours across slots; the caller passes `comp_after =
+        max(run)` so comp lands strictly outside the job's window.
         """
         bd = absorber.bats[b]
         rec_t = schedule[t - 1]
-        # C19: skip if battery is being charged at this hour
         chg_here = sum(rec_t.get("k", {}).get(f"{b}_chg", {}).values())
         if chg_here > EPS:
             return 0.0
-        # C14 headroom
         current_dis = rec_t["P"].get(b, 0.0)
         avail_by_cap = float(bd["discharge_max"]) - current_dis
         if avail_by_cap <= EPS:
             return 0.0
-        # C17 SOC chain — the tightest future SOC determines the shift limit
         soc_min = float(bd["soc_min"])
+        chg_max = float(bd["charge_max"])
+        comp_lo = comp_after if comp_after is not None else t
+        cum_comp = 0.0
         min_room = INF
+        chg_key = f"{b}_chg"
         for s in range(t, H_local + 1):
+            # Compensation hours must lie strictly after `comp_lo`.
+            if s > comp_lo:
+                slot_s = schedule[s - 1]
+                chg_at_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                dis_at_s = slot_s["P"].get(b, 0.0)
+                if dis_at_s <= EPS:
+                    sell_at_s = slot_s.get("sell", 0.0)
+                    cum_comp += max(0.0,
+                                    min(chg_max - chg_at_s, sell_at_s))
             soc_s = schedule[s - 1].get("soc", {}).get(b, soc_min)
-            min_room = min(min_room, soc_s - soc_min)
+            effective = soc_s - soc_min + cum_comp
+            if effective < min_room:
+                min_room = effective
         return max(0.0, min(avail_by_cap, min_room))
 
-    def _commit_battery(t, w_needed, jid):
-        """Discharge available batteries at hour t to satisfy up to
-        `w_needed` MWh of demand for `jid`. Cascades the SOC reduction
-        through all hours s ≥ t so the schedule stays C17-feasible.
-        Returns the total MWh actually committed."""
+    def _commit_battery(t, w_needed, jid, comp_after=None):
+        """Discharge available batteries at hour t. `comp_after` defaults to
+        `t` (any future hour is a valid comp target). When committing
+        multiple slots of one job, the caller passes `comp_after = max(run)`
+        so compensation hours land strictly after the job's window — this
+        prevents earlier slots from eating the comp budget that later
+        slots in the same run need.
+        """
         committed = 0.0
+        comp_lo = comp_after if comp_after is not None else t
         for b in absorber.bat_ids:
             if committed >= w_needed - EPS:
                 break
-            avail = _battery_avail(t, b)
+            avail = _battery_avail(t, b, comp_after=comp_lo)
             take = min(w_needed - committed, avail)
             if take <= EPS:
                 continue
-            rec = schedule[t - 1]
-            rec["P"][b] = round(rec["P"].get(b, 0.0) + take, 4)
-            rec.setdefault("k", {}).setdefault(jid, {})
-            rec["k"][jid][b] = round(rec["k"][jid].get(b, 0.0) + take, 4)
-            # Cascade SOC reduction across the whole remaining horizon
+
+            bd = absorber.bats[b]
+            chg_max = float(bd["charge_max"])
+            chg_key = f"{b}_chg"
+            soc_init = float(bd["soc_init"])
+
+            # ---- Step 1: discharge at t (mutate plan in place) ---------
+            rec_t = schedule[t - 1]
+            rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
+            rec_t.setdefault("k", {}).setdefault(jid, {})
+            rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
+
+            # ---- Step 2: schedule compensating chg at future hours -----
+            # Greedy: prefer earliest comp hours so SOC recovers fast.
+            # Comp must be at hour > comp_lo (so it lands outside the
+            # run's window when called from _commit_run_min_sell).
+            remaining = take
+            comp_actions = []  # [(s, eps)] applied if step 2 succeeds
+            for s in range(comp_lo + 1, H_local + 1):
+                if remaining <= EPS:
+                    break
+                slot_s = schedule[s - 1]
+                dis_at_s = slot_s["P"].get(b, 0.0)
+                if dis_at_s > EPS:
+                    continue
+                chg_at_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                chg_room = chg_max - chg_at_s
+                sell_at_s = slot_s.get("sell", 0.0)
+                usable = min(chg_room, sell_at_s, remaining)
+                if usable <= EPS:
+                    continue
+                comp_actions.append((s, usable))
+                remaining -= usable
+
+            if remaining > EPS:
+                # Couldn't fully compensate. Rollback step 1 and skip.
+                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
+                if rec_t["P"][b] <= EPS:
+                    rec_t["P"].pop(b, None)
+                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) - take, 4)
+                if rec_t["k"][jid][b] <= EPS:
+                    rec_t["k"][jid].pop(b, None)
+                if not rec_t["k"][jid]:
+                    rec_t["k"].pop(jid, None)
+                continue
+
+            # ---- Step 3: apply compensation actions --------------------
+            # At each comp hour: redirect `eps` MWh from sell to chg[b].
+            # Pick supplier(s) from gen ∪ PV with free P (C21).
+            for s, eps in comp_actions:
+                slot_s = schedule[s - 1]
+                slot_s.setdefault("k", {}).setdefault(chg_key, {})
+                already = {i: 0.0 for i in slot_s["P"]}
+                for k_ent in slot_s["k"].values():
+                    for i, v in k_ent.items():
+                        if i in already:
+                            already[i] += v
+                remaining_eps = eps
+                # Prefer the supplier with most free P (matches commit_at order)
+                ordered = sorted(slot_s["P"].items(), key=lambda kv: -kv[1])
+                for i, p_val in ordered:
+                    if remaining_eps <= EPS:
+                        break
+                    if i not in absorber.gens and i not in absorber.pvs:
+                        continue  # C21: chg only from gen/PV
+                    free = p_val - already.get(i, 0.0)
+                    give = min(remaining_eps, free)
+                    if give <= EPS:
+                        continue
+                    slot_s["k"][chg_key][i] = round(
+                        slot_s["k"][chg_key].get(i, 0.0) + give, 4
+                    )
+                    already[i] = already.get(i, 0.0) + give
+                    remaining_eps -= give
+                slot_s["sell"] = round(slot_s.get("sell", 0.0) - eps, 4)
+
+            # ---- Step 4: recompute SOC[b] from t onward ----------------
+            prev_soc = (schedule[t - 2].get("soc", {}).get(b, soc_init)
+                        if t > 1 else soc_init)
             for s in range(t, H_local + 1):
-                soc_s = schedule[s - 1].get("soc", {}).get(b, 0.0)
-                schedule[s - 1].setdefault("soc", {})[b] = round(
-                    soc_s - take, 4
-                )
+                slot_s = schedule[s - 1]
+                chg_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                dis_s = slot_s["P"].get(b, 0.0)
+                new_soc = prev_soc + chg_s - dis_s
+                slot_s.setdefault("soc", {})[b] = round(new_soc, 4)
+                prev_soc = new_soc
+
             committed += take
         return committed
 
-    def _hour_cost(t, w):
+    def _hour_cost(t, w, comp_after=None):
         """Marginal $ cost of placing w MWh at hour t — sell loss + cheapest
         gen ramp fuel. INF if even 100% sell + gen + PV cannot satisfy w.
 
-        Cost model mirrors the joint LP: PV is free; gen and sell compete on
-        per-MWh cost. The single-hour cost is an upper bound (consistent with
-        commit_at's per-hour processing order).
+        `comp_after` is forwarded to `_battery_avail` so the feasibility
+        estimate matches what the commit step will be able to deliver
+        (battery comp must come from hours strictly after `comp_after`).
         """
         rec = schedule[t - 1]
         avail_sell = rec["sell"]
@@ -703,7 +799,8 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
             pv_avail += max(0.0, cap_avail - curr)
         # Battery additional discharge — free in L1 (no aging cost), bounded
         # by C14 / C17 / C19 via `_battery_avail`.
-        bat_avail = sum(_battery_avail(t, b) for b in absorber.bat_ids)
+        bat_avail = sum(_battery_avail(t, b, comp_after=comp_after)
+                        for b in absorber.bat_ids)
         # Gen headroom and its marginal $/MWh, across all on generators.
         gen_options = []   # list of (avail_mw, cost_var)
         for g in absorber.gen_ids:
@@ -754,33 +851,38 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
     def _find_min_cost(r, end, e_len, w_need, preempt):
         """Return (slots, total_cost) for the cheapest feasible placement of
         e_len hours of w_need MWh inside [r, end], or (None, INF) if none.
-        For preempt=1: pick the e cheapest individual hours.
-        For preempt=0: pick the cheapest sliding window of e consecutive hours.
+
+        Battery comp budget is restricted to hours > `end` so each hour in
+        the window can independently use the same comp pool without
+        cascading depletion during commit.
         """
         if r > end or end - r + 1 < e_len:
             return None, INF
         if preempt:
-            ranked = sorted(range(r, end + 1), key=lambda t: _hour_cost(t, w_need))
+            ranked = sorted(
+                range(r, end + 1),
+                key=lambda t: _hour_cost(t, w_need, comp_after=end))
             chosen = ranked[:e_len]
-            total = sum(_hour_cost(t, w_need) for t in chosen)
+            total = sum(_hour_cost(t, w_need, comp_after=end) for t in chosen)
             if total >= INF:
                 return None, INF
             return sorted(chosen), total
         best_window, best_cost = None, INF
         for start in range(r, end - e_len + 2):
             window = list(range(start, start + e_len))
-            total = sum(_hour_cost(t, w_need) for t in window)
+            total = sum(_hour_cost(t, w_need, comp_after=end) for t in window)
             if total < best_cost:
                 best_cost, best_window = total, window
         if best_cost >= INF:
             return None, INF
         return best_window, best_cost
 
-    def _commit_min_sell(t, w, jid):
+    def _commit_min_sell(t, w, jid, comp_after=None):
         """Allocate w MWh at hour t. Source order matches cost order:
           1. Gen + PV ramp (via commit_at with sell hidden)
           2. Battery discharge (free in L1, SOC-chain feasible)
           3. Sell borrow (lost revenue)
+        `comp_after` is forwarded to `_commit_battery`.
         Returns (residual, sell_taken).
         """
         rec = schedule[t - 1]
@@ -792,7 +894,7 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         if residual <= EPS:
             return 0.0, 0.0
         # Step 2: battery (also free in L1).
-        bat_committed = _commit_battery(t, residual, jid)
+        bat_committed = _commit_battery(t, residual, jid, comp_after=comp_after)
         residual -= bat_committed
         if residual <= EPS:
             return 0.0, 0.0
@@ -840,15 +942,28 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         return runs
 
     def _commit_run_min_sell(run, w, jid):
-        """Joint LP commit over a consecutive run of hours.
+        """Commit demand across a consecutive run of hours.
 
-        Solves a small LP that simultaneously decides Δx (extra gen output),
-        Δp (extra PV output), and s (sell take) at every hour in the run,
-        respecting ramp_up/ramp_down constraints LINKING consecutive hours
-        inside the run as well as the original-schedule values at the run's
-        boundaries. Single-hour runs fall back to `_commit_min_sell`.
+        Each slot is committed independently via `_commit_min_sell`, with
+        battery compensation restricted to hours strictly after the run's
+        last hour (`comp_after = max(run)`). This guarantees that earlier
+        slots in the run don't consume the comp budget reserved for
+        later slots' SOC chain.
 
         Returns total sell MWh borrowed across the run.
+        """
+        comp_after = max(run)
+        total_sell = 0.0
+        for tt in run:
+            _, taken = _commit_min_sell(tt, w, jid, comp_after=comp_after)
+            total_sell += taken
+        return total_sell
+
+    def _commit_run_min_sell_LP_UNUSED(run, w, jid):
+        """[Deprecated] Joint LP over a run of hours. Disabled because the LP
+        doesn't include battery as a source, so it conflicts with
+        `_find_min_cost`'s battery-aware feasibility check. Kept for
+        reference only.
         """
         if len(run) == 1:
             _, taken = _commit_min_sell(run[0], w, jid)
@@ -1167,6 +1282,42 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
 # Output writing
 # =============================================================================
 
+def _build_external_log(acceptance_log, aperiodic_log):
+    """Convert internal log entries to the rubric output schema:
+    one combined list of {job_id, type, release_time, abs_deadline,
+    execution_time, energy_demand, assigned_hours, accepted}."""
+    def _energy(w, e):
+        val = float(w) * int(e)
+        return int(val) if val.is_integer() else round(val, 4)
+
+    entries = []
+    for rec in acceptance_log:
+        e = int(rec["e"])
+        entries.append({
+            "job_id":         rec["job_id"],
+            "type":           "sporadic",
+            "release_time":   int(rec["release"]),
+            "abs_deadline":   int(rec["deadline"]),
+            "execution_time": e,
+            "energy_demand":  _energy(rec["w"], e),
+            "assigned_hours": list(rec.get("slots", [])),
+            "accepted":       rec["decision"] == "accept",
+        })
+    for rec in aperiodic_log:
+        e = int(rec["e"])
+        entries.append({
+            "job_id":         rec["job_id"],
+            "type":           "aperiodic",
+            "release_time":   int(rec["release"]),
+            "abs_deadline":   int(rec["soft_deadline"]),
+            "execution_time": e,
+            "energy_demand":  _energy(rec["w"], e),
+            "assigned_hours": list(rec.get("slots", [])),
+            "accepted":       rec["decision"] not in ("infeasible", "skipped"),
+        })
+    return entries
+
+
 def write_outputs(schedule, acceptance_log, aperiodic_log):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -1178,8 +1329,8 @@ def write_outputs(schedule, acceptance_log, aperiodic_log):
     log_path = OUTPUT_DIR / "acceptance_test_log.json"
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump({
-            "acceptance_test_log": acceptance_log,
-            "aperiodic_log":       aperiodic_log,
+            "acceptance_test_log": _build_external_log(
+                acceptance_log, aperiodic_log),
         }, f, indent=2)
     print(f"  wrote {log_path}")
 

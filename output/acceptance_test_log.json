@@ -2,279 +2,217 @@
   "acceptance_test_log": [
     {
       "job_id": "s1",
-      "decision": "accept",
-      "arrival": 4,
-      "release": 4,
-      "deadline": 8,
-      "e": 2,
-      "w": 8.0,
-      "slots": [
+      "type": "sporadic",
+      "release_time": 4,
+      "abs_deadline": 8,
+      "execution_time": 2,
+      "energy_demand": 16,
+      "assigned_hours": [
         6,
         7
       ],
-      "sell_borrowed": 6.0,
-      "cost_estimate": 870.0,
-      "caused_violation": false
+      "accepted": true
     },
     {
       "job_id": "s2",
-      "decision": "reject",
-      "arrival": 11,
-      "release": 11,
-      "deadline": 15,
-      "e": 2,
-      "w": 12.0,
-      "reason": "no feasible 2h placement of 12.0MW in [11,15] (even at 100% sell)",
-      "caused_violation": false
+      "type": "sporadic",
+      "release_time": 11,
+      "abs_deadline": 15,
+      "execution_time": 2,
+      "energy_demand": 24,
+      "assigned_hours": [],
+      "accepted": false
     },
     {
       "job_id": "s3",
-      "decision": "accept",
-      "arrival": 18,
-      "release": 18,
-      "deadline": 25,
-      "e": 3,
-      "w": 14.0,
-      "slots": [
+      "type": "sporadic",
+      "release_time": 18,
+      "abs_deadline": 25,
+      "execution_time": 3,
+      "energy_demand": 42,
+      "assigned_hours": [
         21,
         22,
         24
       ],
-      "sell_borrowed": 37.0,
-      "cost_estimate": 3548.0,
-      "caused_violation": false
+      "accepted": true
     },
     {
       "job_id": "s4",
-      "decision": "accept",
-      "arrival": 31,
-      "release": 31,
-      "deadline": 35,
-      "e": 2,
-      "w": 10.0,
-      "slots": [
+      "type": "sporadic",
+      "release_time": 31,
+      "abs_deadline": 35,
+      "execution_time": 2,
+      "energy_demand": 20,
+      "assigned_hours": [
         31,
         32
       ],
-      "sell_borrowed": 10.0,
-      "cost_estimate": 1275.0,
-      "caused_violation": false
+      "accepted": true
     },
     {
       "job_id": "s5",
-      "decision": "reject",
-      "arrival": 39,
-      "release": 39,
-      "deadline": 45,
-      "e": 3,
-      "w": 15.0,
-      "reason": "no feasible 3h placement of 15.0MW in [39,45] (even at 100% sell)",
-      "caused_violation": false
+      "type": "sporadic",
+      "release_time": 39,
+      "abs_deadline": 45,
+      "execution_time": 3,
+      "energy_demand": 45,
+      "assigned_hours": [
+        40,
+        41,
+        42
+      ],
+      "accepted": true
     },
     {
       "job_id": "s6",
-      "decision": "accept",
-      "arrival": 58,
-      "release": 58,
-      "deadline": 63,
-      "e": 2,
-      "w": 14.0,
-      "slots": [
+      "type": "sporadic",
+      "release_time": 58,
+      "abs_deadline": 63,
+      "execution_time": 2,
+      "energy_demand": 28,
+      "assigned_hours": [
         61,
         62
       ],
-      "sell_borrowed": 28.0,
-      "cost_estimate": 630.0,
-      "caused_violation": false
-    }
-  ],
-  "aperiodic_log": [
+      "accepted": true
+    },
     {
       "job_id": "a1",
-      "decision": "scheduled_on_time",
-      "release": 7,
-      "soft_deadline": 16,
-      "e": 2,
-      "w": 8.0,
-      "slots": [
-        7,
-        10
+      "type": "aperiodic",
+      "release_time": 7,
+      "abs_deadline": 16,
+      "execution_time": 2,
+      "energy_demand": 16,
+      "assigned_hours": [
+        10,
+        15
       ],
-      "completion": 10,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 16.0,
-      "cost_estimate": 992.0
+      "accepted": true
     },
     {
       "job_id": "a2",
-      "decision": "scheduled_on_time",
-      "release": 14,
-      "soft_deadline": 25,
-      "e": 3,
-      "w": 10.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 14,
+      "abs_deadline": 25,
+      "execution_time": 3,
+      "energy_demand": 30,
+      "assigned_hours": [
         23,
         24,
         25
       ],
-      "completion": 25,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 10.0,
-      "cost_estimate": 1840.0
+      "accepted": true
     },
     {
       "job_id": "a3",
-      "decision": "scheduled_on_time",
-      "release": 22,
-      "soft_deadline": 29,
-      "e": 2,
-      "w": 12.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 22,
+      "abs_deadline": 29,
+      "execution_time": 2,
+      "energy_demand": 24,
+      "assigned_hours": [
         26,
         28
       ],
-      "completion": 28,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 14.0,
-      "cost_estimate": 1554.0
+      "accepted": true
     },
     {
       "job_id": "a4",
-      "decision": "scheduled_on_time",
-      "release": 27,
-      "soft_deadline": 36,
-      "e": 3,
-      "w": 9.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 27,
+      "abs_deadline": 36,
+      "execution_time": 3,
+      "energy_demand": 27,
+      "assigned_hours": [
         27,
         29,
         30
       ],
-      "completion": 30,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 12.0,
-      "cost_estimate": 1606.0
+      "accepted": true
     },
     {
       "job_id": "a5",
-      "decision": "scheduled_late",
-      "release": 33,
-      "soft_deadline": 39,
-      "e": 2,
-      "w": 11.0,
-      "slots": [
-        61,
-        62
+      "type": "aperiodic",
+      "release_time": 33,
+      "abs_deadline": 39,
+      "execution_time": 2,
+      "energy_demand": 22,
+      "assigned_hours": [
+        38,
+        39
       ],
-      "completion": 62,
-      "tardiness": 23,
-      "missed_soft_deadline": true,
-      "via_sell_borrow": true,
-      "sell_borrowed": 22.0,
-      "cost_estimate": 495.0
+      "accepted": true
     },
     {
       "job_id": "a6",
-      "decision": "scheduled_on_time",
-      "release": 41,
-      "soft_deadline": 54,
-      "e": 4,
-      "w": 8.0,
-      "slots": [
-        47,
+      "type": "aperiodic",
+      "release_time": 41,
+      "abs_deadline": 54,
+      "execution_time": 4,
+      "energy_demand": 32,
+      "assigned_hours": [
+        50,
         51,
         52,
         53
       ],
-      "completion": 53,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 12.0,
-      "cost_estimate": 1821.0
+      "accepted": true
     },
     {
       "job_id": "a7",
-      "decision": "scheduled_on_time",
-      "release": 46,
-      "soft_deadline": 53,
-      "e": 2,
-      "w": 13.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 46,
+      "abs_deadline": 53,
+      "execution_time": 2,
+      "energy_demand": 26,
+      "assigned_hours": [
         49,
-        50
+        51
       ],
-      "completion": 50,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 16.0,
-      "cost_estimate": 1756.0
+      "accepted": true
     },
     {
       "job_id": "a8",
-      "decision": "scheduled_on_time",
-      "release": 52,
-      "soft_deadline": 61,
-      "e": 3,
-      "w": 10.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 52,
+      "abs_deadline": 61,
+      "execution_time": 3,
+      "energy_demand": 30,
+      "assigned_hours": [
         56,
         60,
         61
       ],
-      "completion": 61,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 20.0,
-      "cost_estimate": 1320.0
+      "accepted": true
     },
     {
       "job_id": "a9",
-      "decision": "scheduled_on_time",
-      "release": 57,
-      "soft_deadline": 66,
-      "e": 3,
-      "w": 12.0,
-      "slots": [
+      "type": "aperiodic",
+      "release_time": 57,
+      "abs_deadline": 66,
+      "execution_time": 3,
+      "energy_demand": 36,
+      "assigned_hours": [
         61,
         62,
         66
       ],
-      "completion": 66,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 36.0,
-      "cost_estimate": 1056.0
+      "accepted": true
     },
     {
       "job_id": "a10",
-      "decision": "scheduled_on_time",
-      "release": 64,
-      "soft_deadline": 71,
-      "e": 3,
-      "w": 9.0,
-      "slots": [
-        67,
+      "type": "aperiodic",
+      "release_time": 64,
+      "abs_deadline": 71,
+      "execution_time": 3,
+      "energy_demand": 27,
+      "assigned_hours": [
+        66,
         70,
         71
       ],
-      "completion": 71,
-      "tardiness": 0,
-      "missed_soft_deadline": false,
-      "via_sell_borrow": true,
-      "sell_borrowed": 9.0,
-      "cost_estimate": 1664.0
+      "accepted": true
     }
   ]
 }

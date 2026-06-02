@@ -22,8 +22,12 @@ def main():
     task_set   = load_json("output/task_set.json")
     schedule   = load_json("output/schedule_result.json")["schedule_result"]
     acc_full   = load_json("output/acceptance_test_log.json")
-    acc_log    = acc_full["acceptance_test_log"]
-    aperiodic_log = acc_full.get("aperiodic_log", [])
+    # New rubric-prescribed output schema: one combined list distinguished by
+    # entry["type"]. Split back into sporadic / aperiodic so the rest of the
+    # evaluator (which references both buckets) keeps working unchanged.
+    _entries = acc_full["acceptance_test_log"]
+    acc_log = [e for e in _entries if e.get("type") == "sporadic"]
+    aperiodic_log = [e for e in _entries if e.get("type") == "aperiodic"]
     prices     = load_json("input/price_72hr.json")["price"]
     proc       = load_json("input/processor_settings.json")
 
@@ -96,15 +100,15 @@ def main():
             completions_by_task.setdefault(tid, []).append(completion)
 
     # ── sporadic instances from acceptance log ───────────────────────────────
-    accepted_sporadic = [e for e in acc_log if e.get("decision") == "accept"]
-    rejected_sporadic = [e for e in acc_log if e.get("decision") == "reject"]
+    accepted_sporadic = [e for e in acc_log if e.get("accepted")]
+    rejected_sporadic = [e for e in acc_log if not e.get("accepted")]
 
     sporadic_instances: list[dict] = []
     for entry in accepted_sporadic:
         jid      = entry["job_id"]
-        release  = entry.get("arrival", entry.get("release"))
-        deadline = entry.get("deadline")
-        e_val    = entry.get("e", 0)
+        release  = entry.get("release_time")
+        deadline = entry.get("abs_deadline")
+        e_val    = entry.get("execution_time", 0)
         hours    = job_hours.get(jid, [])
         completion = max(hours) if hours else None
         sporadic_instances.append({
@@ -113,21 +117,26 @@ def main():
             "deadline":   deadline,
             "e":          e_val,
             "completion": completion,
-            "caused_violation": entry.get("caused_violation", False),
+            "caused_violation": False,
         })
 
     # ── aperiodic instances from phase-3 log ─────────────────────────────────
-    # Each entry has decision ∈ {scheduled_on_time, scheduled_late, skipped}
-    # plus release / soft_deadline / completion / tardiness.
+    # Each entry has type=aperiodic with assigned_hours (empty if skipped),
+    # plus release_time / abs_deadline / accepted.
     aperiodic_instances: list[dict] = []
     for entry in aperiodic_log:
+        slots    = entry.get("assigned_hours", [])
+        deadline = entry.get("abs_deadline")
+        completion = max(slots) if slots else None
+        missed = (not entry.get("accepted", False)
+                  or (completion is not None and completion > deadline))
         aperiodic_instances.append({
             "job_id":     entry["job_id"],
-            "release":    entry.get("release"),
-            "deadline":   entry.get("soft_deadline"),  # soft, absolute
-            "e":          entry.get("e", 0),
-            "completion": entry.get("completion"),  # None if skipped
-            "missed":     entry.get("missed_soft_deadline", False),
+            "release":    entry.get("release_time"),
+            "deadline":   deadline,
+            "e":          entry.get("execution_time", 0),
+            "completion": completion,
+            "missed":     missed,
         })
 
     # ── all hard-deadline job records ────────────────────────────────────────
@@ -184,7 +193,7 @@ def main():
     # ── METRIC: sporadic_value_rate ──────────────────────────────────────────
     # Denominator = ALL demo sporadic jobs (accepted + rejected), per spec.
     # Numerator   = accepted jobs whose completion <= hard deadline.
-    total_sp_exec   = sum(entry.get("e", 0) for entry in acc_log)
+    total_sp_exec   = sum(entry.get("execution_time", 0) for entry in acc_log)
     ontime_sp_exec  = sum(
         s["e"] for s in sporadic_instances
         if s["completion"] is not None and s["completion"] <= s["deadline"]

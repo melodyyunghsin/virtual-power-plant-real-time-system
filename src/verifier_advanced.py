@@ -83,11 +83,16 @@ def run_verifier():
     _ingest("sporadic",  "sporadic")
     _ingest("aperiodic", "aperiodic")
 
+    # 新版輸出 schema: 單一 acceptance_test_log list,每筆以 type 區分。
+    _acc_entries = acc_full["acceptance_test_log"]
+    _sporadic_entries  = [e for e in _acc_entries if e.get("type") == "sporadic"]
+    _aperiodic_entries = [e for e in _acc_entries if e.get("type") == "aperiodic"]
+
     # 被拒絕的 sporadic / 沒排上的 aperiodic 不應該出現在排程裡
-    rejected_sporadic = {entry["job_id"] for entry in acc_full["acceptance_test_log"]
-                         if entry.get("decision") == "reject"}
-    skipped_aperiodic = {entry["job_id"] for entry in acc_full["aperiodic_log"]
-                         if entry.get("decision") == "skipped"}
+    rejected_sporadic = {entry["job_id"] for entry in _sporadic_entries
+                         if not entry.get("accepted")}
+    skipped_aperiodic = {entry["job_id"] for entry in _aperiodic_entries
+                         if not entry.get("accepted")}
 
     violations = []
     def log_violation(constraint_id, msg):
@@ -358,8 +363,8 @@ def run_verifier():
     # 只檢查「該執行的有沒有執行 / 不該執行的有沒有偷跑」，不檢查 slot 精準對應。
 
     # 已接受的 sporadic 必須出現在排程
-    for entry in acc_full["acceptance_test_log"]:
-        if entry.get("decision") != "accept":
+    for entry in _sporadic_entries:
+        if not entry.get("accepted"):
             continue
         jid = entry["job_id"]
         if not job_exec_hours.get(jid):
@@ -367,8 +372,8 @@ def run_verifier():
                           f"已接受的 sporadic {jid} 未出現在排程中")
 
     # 排上的 aperiodic 必須出現在排程
-    for entry in acc_full["aperiodic_log"]:
-        if entry.get("decision") == "skipped":
+    for entry in _aperiodic_entries:
+        if not entry.get("accepted"):
             continue
         jid = entry["job_id"]
         if not job_exec_hours.get(jid):

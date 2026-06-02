@@ -6,76 +6,93 @@
 
 ## 1. 使用語言、版本與套件需求
 
-- **Python**：3.10 以上 (本專案於 Python 3.14.4 測試)
-- **套件**：
+- **Python**: 3.10 以上 (本專案於 Python 3.14.4 測試)
+- **套件**:
   - `pulp >= 3.0` (使用內建 CBC solver，不需額外安裝)
-- **作業系統**：macOS / Linux / Windows 皆可
+- **作業系統**: macOS / Linux / Windows 皆可
 
 無其他外部套件需求；`json`、`math`、`random`、`copy`、`pathlib` 等皆為 Python 標準函式庫。
 
-安裝套件：`pip install pulp`
+---
+
+## 2. 程式編譯方式與環境設定
+
+本專案為純 Python，**無需編譯**。建議使用虛擬環境:
+
+```bash
+# 建立虛擬環境
+python3 -m venv venv
+source venv/bin/activate          # macOS / Linux
+# venv\Scripts\activate           # Windows
+
+# 安裝相依套件
+pip install pulp
+```
 
 ---
 
-## 2. 程式執行流程
+## 3. 程式執行流程
 
 依下列順序執行四個主程式即可重現所有提交的 JSON 輸出。所有指令請在專案根目錄下執行。
 
 ```bash
 # Step 1: 產生 periodic task set
 python3 src/task_generator.py
-# 產出：output/task_set.json
+# 產出: output/task_set.json
+# (可選) python3 src/task_generator.py <seed>  以指定種子重現
+# (可選) python3 src/task_generator.py <seed> <target_f>  指定 frame size
 
 # Step 2: Level 1 日前靜態排程 (Phase 1 ILP + online_phase)
 python3 src/scheduler.py
-# 產出：output/schedule_result.json
+# 產出: output/schedule_result.json
 #       output/acceptance_test_log.json
 
 # Step 3: Level 1 效能評估
 python3 src/evaluator.py
-# 產出：output/evaluation_results.json
+# 產出: output/evaluation_results.json
 
 # Step 4: Level 2 進階動態排程 (滾動視窗重排)
 python3 src/advanced_scheduler.py
-# 產出：output/schedule_result_advanced.json
+# 產出: output/schedule_result_advanced.json
 #       output/acceptance_test_log_advanced.json
-#       output/evaluation_results_advanced.json  (此版本為動態排程器即時計算，欄位較精簡)
-
-# Step 5: Level 2 完整效能評估 (補齊 spec 必填欄位)
-python3 src/evaluator_advanced.py
-# 產出：output/evaluation_results_advanced.json  (覆寫 Step 4 版本，補上
-#       average_tardiness / max_tardiness / average_response_time /
-#       max_response_time / completion_time_jitter /
-#       post_acceptance_violation_rate / relaxed_assumptions 等欄位)
+#       output/evaluation_results_advanced.json
 ```
 
-### 驗證程式 (Optional)
+### 驗證程式
 
 ```bash
 # Level 1 限制式驗證
 python3 src/verifier.py
-# 應顯示：「驗證通過！排程結果完美符合所有 Constraints。」
+# 應顯示「驗證通過! 排程結果完美符合所有 Constraints。」
 
 # Level 2 限制式驗證
 python3 src/verifier_advanced.py
-# 應顯示：「驗證通過！動態排程結果完美符合所有 Constraints。」
+# 應顯示「驗證通過! 動態排程結果完美符合所有 Constraints。」
 ```
 
 ---
 
-## 3. 各程式輸入與輸出檔案說明
+## 4. 各程式輸入與輸出檔案說明
 
-### 3.1 src/task_generator.py — Periodic task set 產生程式
+### 4.1 src/task_generator.py — Periodic task set 產生程式
 
 | 輸入 | 說明 |
 | --- | --- |
-| (無，內部隨機生成) | 以亂數搜尋符合所有限制的 task set，使 frame size = 4 |
+| (CLI 可選) seed | 整數。指定亂數種子以重現特定 task set。未指定則使用 OS 熵的真亂數。 |
+| (CLI 可選) target_f | 整數。指定 frame size (預設嘗試 4 → 3)。 |
 
 | 輸出 | 說明 |
 | --- | --- |
-| `output/task_set.json` | Periodic task 集合 (含 r, p, e, d, w, preempt) |
+| `output/task_set.json` | Periodic task 集合 (含 r, p, e, d, w, preempt) + `_meta` (seed, frame_size) |
 
-### 3.2 src/scheduler.py — Level 1 日前靜態排程
+執行範例:
+```bash
+python3 src/task_generator.py              # 隨機 seed
+python3 src/task_generator.py 42           # seed=42, 預設 frame size
+python3 src/task_generator.py 42 3         # seed=42, 強制 frame size=3
+```
+
+### 4.2 src/scheduler.py — Level 1 日前靜態排程
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -89,11 +106,11 @@ python3 src/verifier_advanced.py
 | `output/schedule_result.json` | 72 小時日前固定排程，含每小時的 P、k、sell、soc 等欄位 |
 | `output/acceptance_test_log.json` | Sporadic 接受/拒絕紀錄 + aperiodic 安排紀錄 |
 
-執行流程：
-- **Phase 1**：使用 PuLP CBC 解 ILP，僅處理 periodic tasks。目標函式為 minimize α·f1 + f2 + f3。
-- **Online Phase**：依 release time 排序，逐一處理 sporadic (acceptance test) 與 aperiodic (force-place per C4)。連續時段以 joint LP 求最小化售電損失 + 機組變動成本。
+執行流程:
+- **Phase 1**: 使用 PuLP CBC 解 ILP，僅處理 periodic tasks。目標函式為 `min α·f1 + f2 + f3`。
+- **Online Phase**: 依 release time 排序，逐一處理 sporadic (acceptance test) 與 aperiodic (force-place per C4)。每個工作用 `_find_min_cost` 找出能量成本最低的時段，並以「PV → 電池 → 機組 → sell」的優先序提交。電池放電會自動進行 SOC 補償 (在未來非充電時段增加 chg、減少 sell)，以維持 SOC 軌跡符合 C17 限制。
 
-### 3.3 src/evaluator.py — Level 1 效能評估
+### 4.3 src/evaluator.py — Level 1 效能評估
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -104,48 +121,32 @@ python3 src/verifier_advanced.py
 
 | 輸出 | 說明 |
 | --- | --- |
-| `output/evaluation_results.json` | 評估指標：miss rate、tardiness、response time、jitter、objective value 等 |
+| `output/evaluation_results.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
 
-### 3.4 src/advanced_scheduler.py — Level 2 動態排程
+### 4.4 src/advanced_scheduler.py — Level 2 動態排程
 
 | 輸入 | 說明 |
 | --- | --- |
 | `output/schedule_result.json` | 以 Level 1 排程為起點 |
-| `input/processor_settings.json` | 含 L2 額外欄位：`pv_actual`、`forecast_error_std`、`charge_efficiency`、`discharge_efficiency`、`self_discharge_rate`、`aging_cost` |
-| `input/price_72hr.json` | 含 L2 額外欄位：`realtime_price_factor`、`cancellation_penalty_rate` |
+| `input/processor_settings.json` | 含 L2 額外欄位: `pv_actual`、`forecast_error_std`、`charge_efficiency`、`discharge_efficiency`、`self_discharge_rate`、`aging_cost` |
+| `input/price_72hr.json` | 含 L2 額外欄位: `realtime_price_factor`、`cancellation_penalty_rate` |
 | `input/aperiodic_n_sporadic.json` | 同 Level 1 |
 
 | 輸出 | 說明 |
 | --- | --- |
 | `output/schedule_result_advanced.json` | 動態執行 72 小時後的實際排程 |
 | `output/acceptance_test_log_advanced.json` | Sporadic / aperiodic 線上處理紀錄 |
-| `output/evaluation_results_advanced.json` | L2 評估結果 + 與 L1 比較 (vs_static block) |
+| `output/evaluation_results_advanced.json` | L2 評估結果 + 與 L1 比較 (`vs_static` block) |
 
-執行流程：
-- 每小時揭露 `pv_actual` 與即時電價，並在以下事件觸發 12 小時滾動視窗 ILP：
-  - PV 實際出力較預測下降超過 7 %
+執行流程:
+- 每小時揭露 `pv_actual` 與即時電價，並在以下事件觸發 12 小時滾動視窗 ILP:
+  - PV 實際出力較預測下降超過 7%
   - Sporadic / aperiodic 工作到達
   - 每 6 小時例行刷新
 - 滾動 ILP 只重新優化 dispatch (P, sell, gen on/off, battery)；工作的時段分配自到達時即鎖定。
 - 每小時結算時若實際 sell 低於 day-ahead 承諾，累積取消售電 penalty。
 
-### 3.5 src/evaluator_advanced.py — Level 2 完整效能評估
-
-`advanced_scheduler.py` 在動態排程結束時會輸出一個精簡版的 `evaluation_results_advanced.json`（僅包含 miss rate、generator_cost、market_revenue、cancellation_penalty、objective_value、vs_static 等核心欄位）。為符合 spec Appendix H 對評估指標完整性的要求，請於 Step 4 之後再執行本程式，覆寫為含全部欄位的版本。
-
-| 輸入 | 說明 |
-| --- | --- |
-| `output/schedule_result_advanced.json` | L2 動態排程結果 |
-| `output/acceptance_test_log_advanced.json` | Sporadic + aperiodic 線上處理紀錄 |
-| `input/aperiodic_n_sporadic.json` | Demo 工作清單 (計算 sporadic_value_rate) |
-| `input/price_72hr.json` | 市場價格 (含 realtime_price_factor) |
-| `input/processor_settings.json` | 含 L2 額外欄位，用於計算 `relaxed_assumptions` 區塊 |
-
-| 輸出 | 說明 |
-| --- | --- |
-| `output/evaluation_results_advanced.json` | 完整 L2 評估指標，含 tardiness / response time / jitter / post_acceptance_violation_rate / relaxed_assumptions |
-
-### 3.6 src/verifier.py / verifier_advanced.py — 限制式驗證
+### 4.5 src/verifier.py / verifier_advanced.py — 限制式驗證
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -160,26 +161,26 @@ python3 src/verifier_advanced.py
 
 ---
 
-## 4. 如何重現繳交的 output JSON
-
-完整重現流程：
+## 5. 如何重現繳交的 output JSON
 
 ```bash
 cd virtual-power-plant-real-time-system
+
+# (建議) 啟用虛擬環境
+source venv/bin/activate
 
 # 依序執行
 python3 src/task_generator.py
 python3 src/scheduler.py
 python3 src/evaluator.py
 python3 src/advanced_scheduler.py
-python3 src/evaluator_advanced.py     # 覆寫 evaluation_results_advanced.json 為完整版
 
 # 驗證
 python3 src/verifier.py
 python3 src/verifier_advanced.py
 ```
 
-執行後 `output/` 目錄將包含七個 JSON 檔案：
+執行後 `output/` 目錄將包含七個 JSON 檔案:
 
 ```
 output/
@@ -194,13 +195,13 @@ output/
 
 ### 注意事項
 
-- **`task_generator.py` 為隨機產生**：每次執行可能產生不同的合法 task set。若要重現提交的 `task_set.json`，請保留原檔案，**直接從 Step 2 開始**執行即可。
-- **CBC solver**：PuLP 內建。若有特殊環境問題，可在 `scheduler.py` / `advanced_scheduler.py` 內將 `pulp.PULP_CBC_CMD()` 換成其他 solver。
-- **L1 與 L2 為前後相依**：`advanced_scheduler.py` 會讀取 `schedule_result.json` 當作初始計劃，因此 L2 執行前必須先跑過 `scheduler.py`。
+- **`task_generator.py` 為隨機產生**: 預設使用 OS 熵取得真亂數 seed，每次執行可能產生不同的合法 task set。若要重現提交的 `task_set.json`，請從 `task_set.json` 的 `_meta.seed` 欄位讀取 seed，並透過 CLI 傳入: `python3 src/task_generator.py <seed>`。
+- **CBC solver**: PuLP 內建，無需額外安裝。
+- **L1 與 L2 為前後相依**: `advanced_scheduler.py` 會讀取 `schedule_result.json` 當作初始計劃，因此 L2 執行前必須先跑過 `scheduler.py`。
 
 ---
 
-## 5. 專案結構
+## 6. 專案結構
 
 ```
 virtual-power-plant-real-time-system/
@@ -211,7 +212,7 @@ virtual-power-plant-real-time-system/
 │   ├── scheduler.py                # Level 1 日前排程 (Phase 1 ILP + online_phase)
 │   ├── evaluator.py                # Level 1 效能評估
 │   ├── advanced_scheduler.py       # Level 2 動態排程
-│   ├── evaluator_advanced.py       # Level 2 完整效能評估 (Step 5 執行)
+│   ├── evaluator_advanced.py       # Level 2 效能評估
 │   ├── verifier.py                 # Level 1 限制式驗證
 │   └── verifier_advanced.py        # Level 2 限制式驗證
 ├── input/

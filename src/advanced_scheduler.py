@@ -278,12 +278,139 @@ class AdvancedScheduler:
         return max_drop
 
     # -- slack / cost helpers (mirror scheduler.online_phase) ---------------
-    def _hour_cost(self, t, w):
-        """Marginal $ cost of placing w MWh at hour t — sell loss + cheapest
-        gen ramp fuel. INF if even 100 % sell + gen + PV ramp cannot satisfy w.
+    def _battery_avail(self, t, b, comp_after=None):
+        """Max additional MWh of L2 battery discharge at hour t.
 
-        Cost model mirrors the joint LP: PV is free; gen and sell compete
-        on per-MWh marginal cost (cost_variable[g] vs price[t]).
+        Mirrors the L1 SOC-chain check with compensation: discharging Δ at t
+        shifts SOC down (approximately by Δ in this conservative check, even
+        though L2 dynamics multiply by 1/η_d). Compensation by charging at a
+        future non-discharging hour s* > comp_after siphons sell[s*] →
+        chg[s*]. The replan ILP that follows each commit re-derives SOC
+        with full L2 dynamics, so this approximation is safe.
+        """
+        bd = self.bat_by_id[b]
+        rec_t = self.plan[t - 1]
+        chg_here = sum(rec_t.get("k", {}).get(f"{b}_chg", {}).values())
+        if chg_here > EPS:
+            return 0.0
+        current_dis = rec_t["P"].get(b, 0.0)
+        avail_by_cap = float(bd["discharge_max"]) - current_dis
+        if avail_by_cap <= EPS:
+            return 0.0
+        soc_min = float(bd["soc_min"])
+        chg_max = float(bd["charge_max"])
+        comp_lo = comp_after if comp_after is not None else t
+        cum_comp = 0.0
+        min_room = INF
+        chg_key = f"{b}_chg"
+        for s in range(t, H + 1):
+            if s > comp_lo:
+                slot_s = self.plan[s - 1]
+                chg_at_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                dis_at_s = slot_s["P"].get(b, 0.0)
+                if dis_at_s <= EPS:
+                    sell_at_s = slot_s.get("sell", 0.0)
+                    cum_comp += max(0.0,
+                                    min(chg_max - chg_at_s, sell_at_s))
+            soc_s = self.plan[s - 1].get("soc", {}).get(b, soc_min)
+            effective = soc_s - soc_min + cum_comp
+            if effective < min_room:
+                min_room = effective
+        return max(0.0, min(avail_by_cap, min_room))
+
+    def _commit_battery(self, t, w_needed, jid, comp_after=None):
+        """Discharge available batteries at hour t with SOC compensation.
+        Mirrors L1's `_commit_battery`. SOC values are re-derived from the
+        modified chg/dis trajectory using L1-ideal dynamics; the next
+        replan re-computes SOC with full L2 dynamics so any drift is
+        immediately corrected.
+        """
+        committed = 0.0
+        comp_lo = comp_after if comp_after is not None else t
+        for b in self.bat_ids:
+            if committed >= w_needed - EPS:
+                break
+            avail = self._battery_avail(t, b, comp_after=comp_lo)
+            take = min(w_needed - committed, avail)
+            if take <= EPS:
+                continue
+            bd = self.bat_by_id[b]
+            chg_max = float(bd["charge_max"])
+            chg_key = f"{b}_chg"
+            soc_init = float(bd["soc_init"])
+            rec_t = self.plan[t - 1]
+            rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
+            rec_t.setdefault("k", {}).setdefault(jid, {})
+            rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
+            remaining = take
+            comp_actions = []
+            for s in range(comp_lo + 1, H + 1):
+                if remaining <= EPS:
+                    break
+                slot_s = self.plan[s - 1]
+                dis_at_s = slot_s["P"].get(b, 0.0)
+                if dis_at_s > EPS:
+                    continue
+                chg_at_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                chg_room = chg_max - chg_at_s
+                sell_at_s = slot_s.get("sell", 0.0)
+                usable = min(chg_room, sell_at_s, remaining)
+                if usable <= EPS:
+                    continue
+                comp_actions.append((s, usable))
+                remaining -= usable
+            if remaining > EPS:
+                # Rollback discharge — can't fully compensate.
+                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
+                if rec_t["P"][b] <= EPS:
+                    rec_t["P"].pop(b, None)
+                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) - take, 4)
+                if rec_t["k"][jid][b] <= EPS:
+                    rec_t["k"][jid].pop(b, None)
+                if not rec_t["k"][jid]:
+                    rec_t["k"].pop(jid, None)
+                continue
+            for s, eps in comp_actions:
+                slot_s = self.plan[s - 1]
+                slot_s.setdefault("k", {}).setdefault(chg_key, {})
+                already = {i: 0.0 for i in slot_s["P"]}
+                for k_ent in slot_s["k"].values():
+                    for i, v in k_ent.items():
+                        if i in already:
+                            already[i] += v
+                remaining_eps = eps
+                ordered = sorted(slot_s["P"].items(), key=lambda kv: -kv[1])
+                for i, p_val in ordered:
+                    if remaining_eps <= EPS:
+                        break
+                    if i not in self.gen_ids and i not in self.pv_ids:
+                        continue
+                    free = p_val - already.get(i, 0.0)
+                    give = min(remaining_eps, free)
+                    if give <= EPS:
+                        continue
+                    slot_s["k"][chg_key][i] = round(
+                        slot_s["k"][chg_key].get(i, 0.0) + give, 4)
+                    already[i] += give
+                    remaining_eps -= give
+                slot_s["sell"] = round(slot_s.get("sell", 0.0) - eps, 4)
+            # Recompute SOC[b] (L1-ideal approximation; replan will refine).
+            prev_soc = (self.plan[t - 2].get("soc", {}).get(b, soc_init)
+                        if t > 1 else soc_init)
+            for s in range(t, H + 1):
+                slot_s = self.plan[s - 1]
+                chg_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
+                dis_s = slot_s["P"].get(b, 0.0)
+                new_soc = prev_soc + chg_s - dis_s
+                slot_s.setdefault("soc", {})[b] = round(new_soc, 4)
+                prev_soc = new_soc
+            committed += take
+        return committed
+
+    def _hour_cost(self, t, w, comp_after=None):
+        """Marginal $ cost of placing w MWh at hour t — sell loss + cheapest
+        gen ramp fuel. INF if even 100 % sell + gen + PV + battery ramp
+        cannot satisfy w. Battery comp restricted to hours > `comp_after`.
         """
         rec = self.plan[t - 1]
         avail_sell = rec.get("sell", 0.0)
@@ -294,6 +421,9 @@ class AdvancedScheduler:
                          * self.pv_forecast[pv][t] * self.robust)
             curr = rec["P"].get(pv, 0.0)
             pv_avail += max(0.0, cap_avail - curr)
+        # Battery — additional discharge with SOC chain compensation.
+        bat_avail = sum(self._battery_avail(t, b, comp_after=comp_after)
+                        for b in self.bat_ids)
         # Per-gen headroom and marginal $/MWh.
         gen_options = []
         for g in self.gen_ids:
@@ -311,16 +441,24 @@ class AdvancedScheduler:
             gh = max(0.0, max_new - p_curr)
             if gh > EPS:
                 gen_options.append((gh, float(gd["cost_variable"])))
-        if pv_avail + sum(g[0] for g in gen_options) + avail_sell < w - EPS:
+        if (pv_avail + bat_avail + sum(g[0] for g in gen_options)
+                + avail_sell < w - EPS):
             return INF
         remaining = w
+        # Step 1: PV (free)
         take = min(remaining, pv_avail)
         remaining -= take
         if remaining <= EPS:
             return 0.0
+        # Step 2: battery (free in L1, has aging in L2 but replan accounts)
+        take = min(remaining, bat_avail)
+        remaining -= take
+        if remaining <= EPS:
+            return 0.0
+        # Step 3: pick gen vs sell per-MWh by cheaper rate.
         p_t = float(self.price_arr[t])
         sources = list(gen_options) + [(avail_sell, p_t)]
-        sources.sort(key=lambda x: x[1])   # cheapest first
+        sources.sort(key=lambda x: x[1])
         cost = 0.0
         for avail, rate in sources:
             if remaining <= EPS:
@@ -332,21 +470,26 @@ class AdvancedScheduler:
 
     def _find_min_cost(self, r, end, e_len, w_need, preempt):
         """Cheapest feasible placement of e_len hours of w_need MWh in [r, end].
-        Returns (sorted_slots, total_cost) or (None, INF) if infeasible."""
+        Battery comp budget is restricted to hours > `end` so each candidate
+        hour can independently use comp without cascading depletion.
+        """
         if r > end or end - r + 1 < e_len:
             return None, INF
         if preempt:
-            ranked = sorted(range(r, end + 1),
-                            key=lambda t: self._hour_cost(t, w_need))
+            ranked = sorted(
+                range(r, end + 1),
+                key=lambda t: self._hour_cost(t, w_need, comp_after=end))
             chosen = ranked[:e_len]
-            total = sum(self._hour_cost(t, w_need) for t in chosen)
+            total = sum(self._hour_cost(t, w_need, comp_after=end)
+                        for t in chosen)
             if total >= INF:
                 return None, INF
             return sorted(chosen), total
         best_window, best_cost = None, INF
         for start in range(r, end - e_len + 2):
             window = list(range(start, start + e_len))
-            total = sum(self._hour_cost(t, w_need) for t in window)
+            total = sum(self._hour_cost(t, w_need, comp_after=end)
+                        for t in window)
             if total < best_cost:
                 best_cost, best_window = total, window
         if best_cost >= INF:
@@ -366,14 +509,20 @@ class AdvancedScheduler:
                 runs.append([s])
         return runs
 
-    def _commit_min_sell(self, t, w, jid):
-        """Allocate w MWh at hour t into self.plan using gen+PV ramp first,
-        sell only for the residual. Returns (residual, sell_taken)."""
+    def _commit_min_sell(self, t, w, jid, comp_after=None):
+        """Allocate w MWh at hour t. Order: gen+PV → battery → sell.
+        `comp_after` is forwarded to `_commit_battery`."""
         rec = self.plan[t - 1]
         saved_sell = rec.get("sell", 0.0)
         rec["sell"] = 0.0
         residual = self.absorber.commit_at(t, w, jid)
         rec["sell"] = saved_sell
+        if residual <= EPS:
+            return 0.0, 0.0
+        # Step 2: battery
+        bat_committed = self._commit_battery(t, residual, jid,
+                                             comp_after=comp_after)
+        residual -= bat_committed
         if residual <= EPS:
             return 0.0, 0.0
         sell_take = min(residual, rec.get("sell", 0.0))
@@ -404,8 +553,24 @@ class AdvancedScheduler:
         return residual - committed_sell, committed_sell
 
     def _commit_run_min_sell(self, run, w, jid):
-        """Joint-LP commit over a consecutive run; falls back to single-hour
-        commit for runs of length 1. Returns total sell MWh borrowed."""
+        """Commit a consecutive run via single-hour commits.
+
+        Battery comp restricted to hours > max(run) so within-run slots
+        don't compete for the same comp budget.
+        """
+        comp_after = max(run)
+        total_sell = 0.0
+        for tt in run:
+            _, taken = self._commit_min_sell(tt, w, jid,
+                                             comp_after=comp_after)
+            total_sell += taken
+        return total_sell
+
+    def _commit_run_min_sell_LP_UNUSED(self, run, w, jid):
+        """[Deprecated] Joint LP without battery support; replaced by
+        single-hour iteration to stay consistent with battery-aware
+        feasibility checks. Kept for reference only.
+        """
         if len(run) == 1:
             _, taken = self._commit_min_sell(run[0], w, jid)
             return taken
@@ -997,10 +1162,43 @@ class AdvancedScheduler:
                     "reason": "never placed",
                 })
 
+        # Combine sporadic + aperiodic into the rubric-prescribed output
+        # schema: one list of {job_id, type, release_time, abs_deadline,
+        # execution_time, energy_demand, assigned_hours, accepted}.
+        def _energy(w, e):
+            val = float(w) * int(e)
+            return int(val) if val.is_integer() else round(val, 4)
+
+        external_log = []
+        for rec in self.acceptance_log:
+            e = int(rec["e"])
+            external_log.append({
+                "job_id":         rec["job_id"],
+                "type":           "sporadic",
+                "release_time":   int(rec["release"]),
+                "abs_deadline":   int(rec["deadline"]),
+                "execution_time": e,
+                "energy_demand":  _energy(rec["w"], e),
+                "assigned_hours": list(rec.get("slots", [])),
+                "accepted":       rec["decision"] == "accept",
+            })
+        for rec in ap_log:
+            e = int(rec["e"])
+            external_log.append({
+                "job_id":         rec["job_id"],
+                "type":           "aperiodic",
+                "release_time":   int(rec["release"]),
+                "abs_deadline":   int(rec["soft_deadline"]),
+                "execution_time": e,
+                "energy_demand":  _energy(rec["w"], e),
+                "assigned_hours": list(rec.get("slots", [])),
+                "accepted":       rec["decision"] not in ("infeasible",
+                                                          "skipped"),
+            })
+
         acc_path = OUTPUT_DIR / "acceptance_test_log_advanced.json"
         with open(acc_path, "w", encoding="utf-8") as f:
-            json.dump({"acceptance_test_log": self.acceptance_log,
-                       "aperiodic_log": ap_log}, f, indent=2)
+            json.dump({"acceptance_test_log": external_log}, f, indent=2)
         print(f"  wrote {acc_path}")
 
         # 3) Compute metrics

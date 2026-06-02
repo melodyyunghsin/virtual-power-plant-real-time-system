@@ -169,8 +169,10 @@ def verify_static():
     task_set  = load_json(OUTPUT_DIR / "task_set.json")
     sched     = load_json(OUTPUT_DIR / "schedule_result.json")["schedule_result"]
     acc_full  = load_json(OUTPUT_DIR / "acceptance_test_log.json")
-    acc_log   = acc_full["acceptance_test_log"]
-    ap_log    = acc_full.get("aperiodic_log", [])
+    # New rubric output schema: single combined list with `type` field.
+    _entries  = acc_full["acceptance_test_log"]
+    acc_log   = [e for e in _entries if e.get("type") == "sporadic"]
+    ap_log    = [e for e in _entries if e.get("type") == "aperiodic"]
     expected  = load_json(OUTPUT_DIR / "evaluation_results.json")
 
     demo_path = INPUT_DIR / "aperiodic_n_sporadic.json"
@@ -194,29 +196,34 @@ def verify_static():
     periodic_inst = _periodic_instances(periodic, job_hours)
 
     # ---- sporadic instances (from accept log + schedule completion) -------
-    accepted = [e for e in acc_log if e.get("decision") == "accept"]
-    rejected = [e for e in acc_log if e.get("decision") == "reject"]
+    accepted = [e for e in acc_log if e.get("accepted")]
+    rejected = [e for e in acc_log if not e.get("accepted")]
     sporadic_inst = []
     for entry in accepted:
         jid = entry["job_id"]
         hrs = job_hours.get(jid, [])
         sporadic_inst.append({
-            "release":    entry.get("arrival", entry.get("release")),
-            "deadline":   entry.get("deadline"),
-            "e":          entry.get("e", 0),
+            "release":    entry.get("release_time"),
+            "deadline":   entry.get("abs_deadline"),
+            "e":          entry.get("execution_time", 0),
             "completion": max(hrs) if hrs else None,
-            "caused_violation": entry.get("caused_violation", False),
+            "caused_violation": False,
         })
 
     # ---- aperiodic instances (from phase-3 log) ---------------------------
     aperiodic_inst = []
     for entry in ap_log:
+        slots      = entry.get("assigned_hours", [])
+        deadline   = entry.get("abs_deadline")
+        completion = max(slots) if slots else None
+        missed = (not entry.get("accepted", False)
+                  or (completion is not None and completion > deadline))
         aperiodic_inst.append({
-            "release":    entry.get("release"),
-            "deadline":   entry.get("soft_deadline"),
-            "e":          entry.get("e", 0),
-            "completion": entry.get("completion"),
-            "missed":     entry.get("missed_soft_deadline", False),
+            "release":    entry.get("release_time"),
+            "deadline":   deadline,
+            "e":          entry.get("execution_time", 0),
+            "completion": completion,
+            "missed":     missed,
         })
 
     hard_jobs = periodic_inst + [s for s in sporadic_inst if s["completion"] is not None]
@@ -399,8 +406,9 @@ def verify_advanced():
     task_set   = load_json(OUTPUT_DIR / "task_set.json")
     sched      = load_json(OUTPUT_DIR / "schedule_result_advanced.json")["schedule_result"]
     acc_full   = load_json(OUTPUT_DIR / "acceptance_test_log_advanced.json")
-    acc_log    = acc_full["acceptance_test_log"]
-    ap_log     = acc_full.get("aperiodic_log", [])
+    _entries   = acc_full["acceptance_test_log"]
+    acc_log    = [e for e in _entries if e.get("type") == "sporadic"]
+    ap_log     = [e for e in _entries if e.get("type") == "aperiodic"]
     expected   = load_json(OUTPUT_DIR / "evaluation_results_advanced.json")
     static_eval_path = OUTPUT_DIR / "evaluation_results.json"
     static_eval = load_json(static_eval_path) if static_eval_path.exists() else {}
@@ -421,7 +429,7 @@ def verify_advanced():
     # ---- periodic instances (greedy chunking matches advanced_scheduler) --
     periodic_inst = _periodic_instances(periodic, job_hours)
     # advanced_scheduler counts an instance as "missed" if completion None OR > deadline
-    accepted = [e for e in acc_log if e.get("decision") == "accept"]
+    accepted = [e for e in acc_log if e.get("accepted")]
     hard_misses = sum(
         1 for inst in periodic_inst
         if inst["completion"] is None or inst["completion"] > inst["deadline"]
@@ -430,18 +438,34 @@ def verify_advanced():
     hard_miss_rate = hard_misses / denom
 
     # ---- sporadic completion ----------------------------------------------
+    # Normalize new-schema sporadic entries to the legacy field names used
+    # by the rest of this block.
+    accepted_legacy = [{
+        "job_id":   rec["job_id"],
+        "release":  rec.get("release_time"),
+        "deadline": rec.get("abs_deadline"),
+        "e":        rec.get("execution_time", 0),
+    } for rec in accepted]
+
     sporadic_completed = []
-    for rec in accepted:
+    for rec in accepted_legacy:
         hrs = job_hours.get(rec["job_id"], [])
         sporadic_completed.append({**rec, "completion": max(hrs) if hrs else None})
-    sp_total_e  = sum(rec["e"] for rec in accepted)
+    sp_total_e  = sum(rec["e"] for rec in accepted_legacy)
     sp_ontime_e = sum(rec["e"] for rec in sporadic_completed
                       if rec["completion"] is not None
                       and rec["completion"] <= rec["deadline"])
     svr = sp_ontime_e / sp_total_e if sp_total_e > 0 else None
 
     # ---- aperiodic miss rate ----------------------------------------------
-    missed_ap = sum(1 for e in ap_log if e.get("missed_soft_deadline"))
+    missed_ap = 0
+    for entry in ap_log:
+        slots = entry.get("assigned_hours", [])
+        deadline = entry.get("abs_deadline")
+        completion = max(slots) if slots else None
+        if (not entry.get("accepted", False)
+                or (completion is not None and completion > deadline)):
+            missed_ap += 1
     soft_miss_rate = missed_ap / len(aperiodic_tasks) if aperiodic_tasks else 0.0
 
     # ---- economic ---------------------------------------------------------
