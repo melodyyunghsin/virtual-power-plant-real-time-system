@@ -279,30 +279,42 @@ class AdvancedScheduler:
 
     # -- slack / cost helpers (mirror scheduler.online_phase) ---------------
     def _battery_avail(self, t, b, comp_after=None):
-        """Max additional MWh of L2 battery discharge at hour t.
+        """Max free MWh battery `b` can contribute at hour t toward a new job.
 
-        Mirrors the L1 SOC-chain check with compensation: discharging Δ at t
-        shifts SOC down (approximately by Δ in this conservative check, even
-        though L2 dynamics multiply by 1/η_d). Compensation by charging at a
-        future non-discharging hour s* > comp_after siphons sell[s*] →
-        chg[s*]. The replan ILP that follows each commit re-derives SOC
-        with full L2 dynamics, so this approximation is safe.
+        Two modes (C19 mutex picks one):
+          • charging (chg[b,t] > 0): reduce chg[b,t] by Δ, redirecting the
+            suppliers' P[i,t] from the battery to the new job. Strict
+            no-comp: capped by the natural SOC headroom over [t, H].
+          • idle / discharging: add Δ to dis[b,t]. SOC headroom is augmented
+            by future comp budget (siphon sell→chg at hours > comp_after),
+            matching `_commit_battery` step 2.
+        Replan ILP downstream re-derives SOC with full L2 dynamics so the
+        L1-ideal SOC bookkeeping here is safe (drift gets corrected).
         """
         bd = self.bat_by_id[b]
         rec_t = self.plan[t - 1]
-        chg_here = sum(rec_t.get("k", {}).get(f"{b}_chg", {}).values())
+        chg_key = f"{b}_chg"
+        chg_here = sum(rec_t.get("k", {}).get(chg_key, {}).values())
+        soc_min = float(bd["soc_min"])
+
         if chg_here > EPS:
-            return 0.0
+            # Charging-mode (strict no-comp). Keeps `_hour_cost` tight
+            # enough that the commit will not roll back from cross-slot
+            # SOC chain conflicts.
+            soc_floor = INF
+            for s in range(t, H + 1):
+                soc_s = self.plan[s - 1].get("soc", {}).get(b, soc_min)
+                soc_floor = min(soc_floor, soc_s - soc_min)
+            return max(0.0, min(chg_here, soc_floor))
+
         current_dis = rec_t["P"].get(b, 0.0)
         avail_by_cap = float(bd["discharge_max"]) - current_dis
         if avail_by_cap <= EPS:
             return 0.0
-        soc_min = float(bd["soc_min"])
         chg_max = float(bd["charge_max"])
         comp_lo = comp_after if comp_after is not None else t
         cum_comp = 0.0
         min_room = INF
-        chg_key = f"{b}_chg"
         for s in range(t, H + 1):
             if s > comp_lo:
                 slot_s = self.plan[s - 1]
@@ -319,11 +331,13 @@ class AdvancedScheduler:
         return max(0.0, min(avail_by_cap, min_room))
 
     def _commit_battery(self, t, w_needed, jid, comp_after=None):
-        """Discharge available batteries at hour t with SOC compensation.
-        Mirrors L1's `_commit_battery`. SOC values are re-derived from the
-        modified chg/dis trajectory using L1-ideal dynamics; the next
-        replan re-computes SOC with full L2 dynamics so any drift is
-        immediately corrected.
+        """Tap free battery MWh at hour t toward jid's demand.
+
+        Dispatches per `_battery_avail` mode at t:
+          • charging  → reduce chg[b,t]; redirect supplier energy to jid.
+          • idle/dis  → add to dis[b,t] (discharge).
+        SOC re-derived under L1-ideal dynamics; downstream L2 replan
+        refines.
         """
         committed = 0.0
         comp_lo = comp_after if comp_after is not None else t
@@ -339,10 +353,46 @@ class AdvancedScheduler:
             chg_key = f"{b}_chg"
             soc_init = float(bd["soc_init"])
             rec_t = self.plan[t - 1]
-            rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
-            rec_t.setdefault("k", {}).setdefault(jid, {})
-            rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
-            remaining = take
+            chg_here = sum(rec_t.get("k", {}).get(chg_key, {}).values())
+            is_chg_mode = chg_here > EPS
+
+            applied_chg_redirect = []   # rollback record
+            if is_chg_mode:
+                chg_alloc = list(rec_t["k"][chg_key].items())
+                remaining_t = take
+                for i, val_i in chg_alloc:
+                    if remaining_t <= EPS:
+                        break
+                    give = min(val_i, remaining_t)
+                    if give <= EPS:
+                        continue
+                    new_chg = val_i - give
+                    if new_chg <= EPS:
+                        rec_t["k"][chg_key].pop(i, None)
+                    else:
+                        rec_t["k"][chg_key][i] = round(new_chg, 4)
+                    rec_t["k"].setdefault(jid, {})
+                    rec_t["k"][jid][i] = round(
+                        rec_t["k"][jid].get(i, 0.0) + give, 4
+                    )
+                    applied_chg_redirect.append((i, give))
+                    remaining_t -= give
+                if chg_key in rec_t["k"] and not rec_t["k"][chg_key]:
+                    rec_t["k"].pop(chg_key)
+            else:
+                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
+                rec_t.setdefault("k", {}).setdefault(jid, {})
+                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
+
+            # ---- Step 2: minimum-needed comp at future hours ------------
+            soc_min_b = float(bd["soc_min"])
+            soc_floor = INF
+            for s in range(t, H + 1):
+                soc_s = self.plan[s - 1].get("soc", {}).get(b, soc_min_b)
+                soc_floor = min(soc_floor, soc_s - soc_min_b)
+            required_comp = max(0.0, take - soc_floor)
+
+            remaining = required_comp
             comp_actions = []
             for s in range(comp_lo + 1, H + 1):
                 if remaining <= EPS:
@@ -360,15 +410,31 @@ class AdvancedScheduler:
                 comp_actions.append((s, usable))
                 remaining -= usable
             if remaining > EPS:
-                # Rollback discharge — can't fully compensate.
-                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
-                if rec_t["P"][b] <= EPS:
-                    rec_t["P"].pop(b, None)
-                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) - take, 4)
-                if rec_t["k"][jid][b] <= EPS:
-                    rec_t["k"][jid].pop(b, None)
-                if not rec_t["k"][jid]:
-                    rec_t["k"].pop(jid, None)
+                # Rollback step 1.
+                if is_chg_mode:
+                    rec_t["k"].setdefault(chg_key, {})
+                    for i, give in applied_chg_redirect:
+                        rec_t["k"][chg_key][i] = round(
+                            rec_t["k"][chg_key].get(i, 0.0) + give, 4
+                        )
+                        rec_t["k"][jid][i] = round(
+                            rec_t["k"][jid].get(i, 0.0) - give, 4
+                        )
+                        if rec_t["k"][jid][i] <= EPS:
+                            rec_t["k"][jid].pop(i, None)
+                    if jid in rec_t["k"] and not rec_t["k"][jid]:
+                        rec_t["k"].pop(jid, None)
+                else:
+                    rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
+                    if rec_t["P"][b] <= EPS:
+                        rec_t["P"].pop(b, None)
+                    rec_t["k"][jid][b] = round(
+                        rec_t["k"][jid].get(b, 0.0) - take, 4
+                    )
+                    if rec_t["k"][jid][b] <= EPS:
+                        rec_t["k"][jid].pop(b, None)
+                    if not rec_t["k"][jid]:
+                        rec_t["k"].pop(jid, None)
                 continue
             for s, eps in comp_actions:
                 slot_s = self.plan[s - 1]
@@ -555,16 +621,23 @@ class AdvancedScheduler:
     def _commit_run_min_sell(self, run, w, jid):
         """Commit a consecutive run via single-hour commits.
 
-        Battery comp restricted to hours > max(run) so within-run slots
-        don't compete for the same comp budget.
+        `_hour_cost` evaluates slots in isolation, so feasibility estimates
+        can over-count shared SOC / sell budgets when multiple slots in a
+        run draw on the same pool. Snapshot the plan and roll back if any
+        slot fails to fully allocate. Returns (total_sell, success).
         """
         comp_after = max(run)
+        snapshot = copy.deepcopy(self.plan)
         total_sell = 0.0
         for tt in run:
-            _, taken = self._commit_min_sell(tt, w, jid,
-                                             comp_after=comp_after)
+            residual, taken = self._commit_min_sell(tt, w, jid,
+                                                    comp_after=comp_after)
             total_sell += taken
-        return total_sell
+            if residual > EPS:
+                for i, snap in enumerate(snapshot):
+                    self.plan[i] = snap
+                return 0.0, False
+        return total_sell, True
 
     def _commit_run_min_sell_LP_UNUSED(self, run, w, jid):
         """[Deprecated] Joint LP without battery support; replaced by
@@ -734,9 +807,22 @@ class AdvancedScheduler:
                     "cost_estimate": round(cost, 2),
                     "caused_violation": False}
 
+        job_snapshot = copy.deepcopy(self.plan)
         sell_borrowed = 0.0
         for run in self._group_consecutive(slots):
-            sell_borrowed += self._commit_run_min_sell(run, w, sid)
+            taken, ok = self._commit_run_min_sell(run, w, sid)
+            if not ok:
+                # Roll back all earlier successful runs as well.
+                for i, snap in enumerate(job_snapshot):
+                    self.plan[i] = snap
+                return {"job_id": sid, "decision": "reject",
+                        "arrival": r, "release": r, "deadline": d,
+                        "e": e, "w": w,
+                        "reason": ("commit rollback: shared SOC / sell "
+                                   "budget exhausted across slots"),
+                        "cost_estimate": round(cost, 2),
+                        "caused_violation": False}
+            sell_borrowed += taken
         self.accepted_sp_e += e
         return {"job_id": sid, "decision": "accept",
                 "arrival": r, "release": r, "deadline": d,
@@ -787,9 +873,32 @@ class AdvancedScheduler:
                     "reason": (f"no feasible {e}h placement of {w}MW "
                                f"in [{r},{H}] even at 100% sell")}
 
-        sell_borrowed = 0.0
-        for run in self._group_consecutive(slots):
-            sell_borrowed += self._commit_run_min_sell(run, w, jid)
+        def _try_commit(slots_):
+            snap = copy.deepcopy(self.plan)
+            sb = 0.0
+            for run in self._group_consecutive(slots_):
+                taken, ok = self._commit_run_min_sell(run, w, jid)
+                if not ok:
+                    for i, s_ in enumerate(snap):
+                        self.plan[i] = s_
+                    return None
+                sb += taken
+            return sb
+
+        sell_borrowed = _try_commit(slots)
+        if sell_borrowed is None and (full_slots is not None
+                                      and full_slots != slots):
+            slots, cost = full_slots, full_cost
+            on_time = max(full_slots) <= min(d_soft, H)
+            sell_borrowed = _try_commit(slots)
+        if sell_borrowed is None:
+            return {"job_id": jid, "decision": "infeasible",
+                    "release": aj["release"], "soft_deadline": d_soft,
+                    "e": e, "w": w, "slots": [],
+                    "completion": None, "tardiness": None,
+                    "missed_soft_deadline": True,
+                    "via_sell_borrow": False,
+                    "reason": "commit rollback even with [r, H] window"}
         completion = max(slots)
         tardiness = max(0, completion - d_soft)
         decision = "scheduled_on_time" if on_time else "scheduled_late"

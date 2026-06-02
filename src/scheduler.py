@@ -19,6 +19,7 @@ Phase 2 — Acceptance test for sporadic jobs (online, no ILP rebuild)
 Phase 3 — Aperiodic queue post-processing
 """
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -631,34 +632,50 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
     H_local = len(schedule)
 
     def _battery_avail(t, b, comp_after=None):
-        """Max additional MWh of discharge from battery `b` at hour `t`,
-        respecting C14, C17, C19.
+        """Max free MWh battery `b` can contribute at hour `t` toward a new
+        job, respecting C14, C15, C17, C19, C21.
 
-        Discharging Δ at t shifts SOC[s] down by Δ for all s ≥ t. We can
-        partially compensate by adding ε to chg[s*] at a future non-
-        discharging hour s* > `comp_after` (default: t). The compensation
-        siphons sell[s*] → chg[s*]. The reason for `comp_after`: when
-        committing multiple slots of the same job, we must avoid sharing
-        the same comp hours across slots; the caller passes `comp_after =
-        max(run)` so comp lands strictly outside the job's window.
+        Two modes (C19 mutex picks one):
+          • idle / discharging (chg[b,t] = 0): add Δ to dis[b,t] (discharge),
+            capped by discharge_max − current_dis.
+          • charging (chg[b,t] > 0): reduce chg[b,t] by Δ, redirecting the
+            suppliers' existing P[i,t] from the battery to the new job.
+            Capped by chg[b,t] (can't go below 0).
+
+        In both modes SOC[s] drops by Δ for all s ≥ t. We can partially
+        compensate by adding ε to chg[s*] at a future non-discharging
+        hour s* > `comp_after` (default: t), siphoning sell[s*] → chg[s*].
+        `comp_after = max(run)` ensures multiple slots of the same job
+        don't share comp hours.
         """
         bd = absorber.bats[b]
         rec_t = schedule[t - 1]
-        chg_here = sum(rec_t.get("k", {}).get(f"{b}_chg", {}).values())
+        chg_key = f"{b}_chg"
+        chg_here = sum(rec_t.get("k", {}).get(chg_key, {}).values())
+        soc_min = float(bd["soc_min"])
+
         if chg_here > EPS:
-            return 0.0
+            # Charging-mode (strict no-comp). Avail capped by natural SOC
+            # headroom over [t, H]; future comp scheduling is skipped here
+            # to keep `_hour_cost`'s feasibility check tight enough that the
+            # commit will never need to roll back from cross-slot conflicts.
+            soc_floor = INF
+            for s in range(t, H_local + 1):
+                soc_s = schedule[s - 1].get("soc", {}).get(b, soc_min)
+                soc_floor = min(soc_floor, soc_s - soc_min)
+            return max(0.0, min(chg_here, soc_floor))
+
+        # Idle / discharging-mode: discharge headroom augmented by future
+        # comp budget (sell→chg siphon at hours > comp_after).
         current_dis = rec_t["P"].get(b, 0.0)
         avail_by_cap = float(bd["discharge_max"]) - current_dis
         if avail_by_cap <= EPS:
             return 0.0
-        soc_min = float(bd["soc_min"])
         chg_max = float(bd["charge_max"])
         comp_lo = comp_after if comp_after is not None else t
         cum_comp = 0.0
         min_room = INF
-        chg_key = f"{b}_chg"
         for s in range(t, H_local + 1):
-            # Compensation hours must lie strictly after `comp_lo`.
             if s > comp_lo:
                 slot_s = schedule[s - 1]
                 chg_at_s = sum(slot_s.get("k", {}).get(chg_key, {}).values())
@@ -674,12 +691,15 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
         return max(0.0, min(avail_by_cap, min_room))
 
     def _commit_battery(t, w_needed, jid, comp_after=None):
-        """Discharge available batteries at hour t. `comp_after` defaults to
-        `t` (any future hour is a valid comp target). When committing
-        multiple slots of one job, the caller passes `comp_after = max(run)`
-        so compensation hours land strictly after the job's window — this
-        prevents earlier slots from eating the comp budget that later
-        slots in the same run need.
+        """Tap free battery MWh at hour t toward jid's demand.
+
+        Dispatches per `_battery_avail` mode at t:
+          • charging  → reduce chg[b,t]; redirect supplier energy to jid.
+          • idle/dis  → add to dis[b,t] (discharge).
+
+        Both paths drop SOC[s] for s ≥ t and require future chg
+        compensation; `comp_after` ensures comp lands outside the job's
+        window when committing multi-slot runs.
         """
         committed = 0.0
         comp_lo = comp_after if comp_after is not None else t
@@ -696,17 +716,54 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
             chg_key = f"{b}_chg"
             soc_init = float(bd["soc_init"])
 
-            # ---- Step 1: discharge at t (mutate plan in place) ---------
             rec_t = schedule[t - 1]
-            rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
-            rec_t.setdefault("k", {}).setdefault(jid, {})
-            rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
+            chg_here = sum(rec_t.get("k", {}).get(chg_key, {}).values())
+            is_chg_mode = chg_here > EPS
 
-            # ---- Step 2: schedule compensating chg at future hours -----
-            # Greedy: prefer earliest comp hours so SOC recovers fast.
-            # Comp must be at hour > comp_lo (so it lands outside the
-            # run's window when called from _commit_run_min_sell).
-            remaining = take
+            # ---- Step 1: apply at t (mutate plan in place) -------------
+            # Path A (chg mode): siphon `take` from Kchg[chg_key][i] into
+            # k[jid][i] for the same suppliers i. P[i,t] unchanged.
+            # Path B (else):     add `take` to dis at b and k[jid][b].
+            applied_chg_redirect = []   # rollback: [(supplier_i, amount)]
+            if is_chg_mode:
+                chg_alloc = list(rec_t["k"][chg_key].items())
+                remaining_t = take
+                for i, val_i in chg_alloc:
+                    if remaining_t <= EPS:
+                        break
+                    give = min(val_i, remaining_t)
+                    if give <= EPS:
+                        continue
+                    new_chg = val_i - give
+                    if new_chg <= EPS:
+                        rec_t["k"][chg_key].pop(i, None)
+                    else:
+                        rec_t["k"][chg_key][i] = round(new_chg, 4)
+                    rec_t["k"].setdefault(jid, {})
+                    rec_t["k"][jid][i] = round(
+                        rec_t["k"][jid].get(i, 0.0) + give, 4
+                    )
+                    applied_chg_redirect.append((i, give))
+                    remaining_t -= give
+                if chg_key in rec_t["k"] and not rec_t["k"][chg_key]:
+                    rec_t["k"].pop(chg_key)
+            else:
+                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) + take, 4)
+                rec_t.setdefault("k", {}).setdefault(jid, {})
+                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) + take, 4)
+
+            # ---- Step 2: schedule the MINIMUM comp chg needed for SOC
+            # feasibility. Only what closes the SOC[s]<soc_min shortfall;
+            # no need to fully restore `take` (that's over-conservative and
+            # causes false-negative rollbacks when SOC has natural headroom).
+            soc_min_b = float(bd["soc_min"])
+            soc_floor = INF
+            for s in range(t, H_local + 1):
+                soc_s = schedule[s - 1].get("soc", {}).get(b, soc_min_b)
+                soc_floor = min(soc_floor, soc_s - soc_min_b)
+            required_comp = max(0.0, take - soc_floor)
+
+            remaining = required_comp
             comp_actions = []  # [(s, eps)] applied if step 2 succeeds
             for s in range(comp_lo + 1, H_local + 1):
                 if remaining <= EPS:
@@ -726,14 +783,31 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
 
             if remaining > EPS:
                 # Couldn't fully compensate. Rollback step 1 and skip.
-                rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
-                if rec_t["P"][b] <= EPS:
-                    rec_t["P"].pop(b, None)
-                rec_t["k"][jid][b] = round(rec_t["k"][jid].get(b, 0.0) - take, 4)
-                if rec_t["k"][jid][b] <= EPS:
-                    rec_t["k"][jid].pop(b, None)
-                if not rec_t["k"][jid]:
-                    rec_t["k"].pop(jid, None)
+                if is_chg_mode:
+                    # Restore Kchg and drop the redirected k[jid][i] entries.
+                    rec_t["k"].setdefault(chg_key, {})
+                    for i, give in applied_chg_redirect:
+                        rec_t["k"][chg_key][i] = round(
+                            rec_t["k"][chg_key].get(i, 0.0) + give, 4
+                        )
+                        rec_t["k"][jid][i] = round(
+                            rec_t["k"][jid].get(i, 0.0) - give, 4
+                        )
+                        if rec_t["k"][jid][i] <= EPS:
+                            rec_t["k"][jid].pop(i, None)
+                    if jid in rec_t["k"] and not rec_t["k"][jid]:
+                        rec_t["k"].pop(jid, None)
+                else:
+                    rec_t["P"][b] = round(rec_t["P"].get(b, 0.0) - take, 4)
+                    if rec_t["P"][b] <= EPS:
+                        rec_t["P"].pop(b, None)
+                    rec_t["k"][jid][b] = round(
+                        rec_t["k"][jid].get(b, 0.0) - take, 4
+                    )
+                    if rec_t["k"][jid][b] <= EPS:
+                        rec_t["k"][jid].pop(b, None)
+                    if not rec_t["k"][jid]:
+                        rec_t["k"].pop(jid, None)
                 continue
 
             # ---- Step 3: apply compensation actions --------------------
@@ -946,18 +1020,29 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
 
         Each slot is committed independently via `_commit_min_sell`, with
         battery compensation restricted to hours strictly after the run's
-        last hour (`comp_after = max(run)`). This guarantees that earlier
-        slots in the run don't consume the comp budget reserved for
-        later slots' SOC chain.
+        last hour (`comp_after = max(run)`).
 
-        Returns total sell MWh borrowed across the run.
+        `_hour_cost` evaluates slots in isolation, so feasibility estimates
+        can over-count shared SOC / sell budgets when multiple slots in a
+        run draw on the same pool. To stay sound, we snapshot the schedule
+        before committing and roll back if any slot fails to fully allocate.
+
+        Returns (total_sell, success). When success=False, schedule is
+        restored to its pre-call state and the job should be rejected.
         """
         comp_after = max(run)
+        snapshot = copy.deepcopy(schedule)
         total_sell = 0.0
         for tt in run:
-            _, taken = _commit_min_sell(tt, w, jid, comp_after=comp_after)
+            residual, taken = _commit_min_sell(tt, w, jid,
+                                               comp_after=comp_after)
             total_sell += taken
-        return total_sell
+            if residual > EPS:
+                # Restore the schedule and signal failure to the caller.
+                for i, snap in enumerate(snapshot):
+                    schedule[i] = snap
+                return 0.0, False
+        return total_sell, True
 
     def _commit_run_min_sell_LP_UNUSED(run, w, jid):
         """[Deprecated] Joint LP over a run of hours. Disabled because the LP
@@ -1195,9 +1280,33 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                     schedule[r - 1]["rejected_sporadic"].append(jid)
                 continue
 
+            # Commit each run; on cross-slot resource conflict any run rolls
+            # back. If a later run fails we also have to undo earlier
+            # already-committed runs, so snapshot at the job level.
+            job_snapshot = copy.deepcopy(schedule)
             sell_borrowed = 0.0
+            commit_ok = True
             for run in _group_consecutive(slots):
-                sell_borrowed += _commit_run_min_sell(run, w, jid)
+                taken, ok = _commit_run_min_sell(run, w, jid)
+                if not ok:
+                    commit_ok = False
+                    break
+                sell_borrowed += taken
+            if not commit_ok:
+                for i, snap in enumerate(job_snapshot):
+                    schedule[i] = snap
+                acceptance_log.append({
+                    "job_id": jid, "decision": "reject",
+                    "arrival": r, "release": r, "deadline": d_abs,
+                    "e": e, "w": w,
+                    "reason": ("commit rollback: shared SOC / sell budget "
+                               "exhausted across slots"),
+                    "cost_estimate": round(cost, 2),
+                    "caused_violation": False,
+                })
+                if 1 <= r <= H:
+                    schedule[r - 1]["rejected_sporadic"].append(jid)
+                continue
             accepted_sp_e += e
             acceptance_log.append({
                 "job_id": jid, "decision": "accept",
@@ -1255,9 +1364,39 @@ def online_phase(schedule, sporadic_input, aperiodic_jobs, proc,
                     schedule[min(d_soft, H) - 1]["missed_aperiodic"].append(jid)
                 continue
 
-            sell_borrowed = 0.0
-            for run in _group_consecutive(slots):
-                sell_borrowed += _commit_run_min_sell(run, w, jid)
+            # Try the chosen placement; if commit rolls back, fall back to
+            # the wider [r, H] placement (force-execute per C4).
+            def _try_commit(slots_):
+                snap = copy.deepcopy(schedule)
+                sb = 0.0
+                for run in _group_consecutive(slots_):
+                    taken, ok = _commit_run_min_sell(run, w, jid)
+                    if not ok:
+                        for i, s_ in enumerate(snap):
+                            schedule[i] = s_
+                        return None
+                    sb += taken
+                return sb
+
+            sell_borrowed = _try_commit(slots)
+            if sell_borrowed is None and (full_slots is not None
+                                          and full_slots != slots):
+                slots, cost = full_slots, full_cost
+                on_time = max(full_slots) <= min(d_soft, H)
+                sell_borrowed = _try_commit(slots)
+            if sell_borrowed is None:
+                aperiodic_log.append({
+                    "job_id": jid, "decision": "infeasible",
+                    "release": r, "soft_deadline": d_soft,
+                    "e": e, "w": w, "slots": [],
+                    "completion": None, "tardiness": None,
+                    "missed_soft_deadline": True,
+                    "via_sell_borrow": False,
+                    "reason": "commit rollback even with [r, H] window",
+                })
+                if 1 <= d_soft <= H:
+                    schedule[min(d_soft, H) - 1]["missed_aperiodic"].append(jid)
+                continue
             completion = max(slots)
             tardiness = max(0, completion - d_soft)
             decision = "scheduled_on_time" if on_time else "scheduled_late"
