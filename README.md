@@ -39,8 +39,6 @@ pip install pulp
 # Step 1: 產生 periodic task set
 python3 src/task_generator.py
 # 產出: output/task_set.json
-# (可選) python3 src/task_generator.py <seed>  以指定種子重現
-# (可選) python3 src/task_generator.py <seed> <target_f>  指定 frame size
 
 # Step 2: Level 1 日前靜態排程 (Phase 1 ILP + online_phase)
 python3 src/scheduler.py
@@ -58,17 +56,6 @@ python3 src/advanced_scheduler.py
 #       output/evaluation_results_advanced.json
 ```
 
-### 驗證程式
-
-```bash
-# Level 1 限制式驗證
-python3 src/verifier.py
-# 應顯示「驗證通過! 排程結果完美符合所有 Constraints。」
-
-# Level 2 限制式驗證
-python3 src/verifier_advanced.py
-# 應顯示「驗證通過! 動態排程結果完美符合所有 Constraints。」
-```
 
 ---
 
@@ -76,20 +63,13 @@ python3 src/verifier_advanced.py
 
 ### 4.1 src/task_generator.py — Periodic task set 產生程式
 
-| 輸入 | 說明 |
-| --- | --- |
-| (CLI 可選) seed | 整數。指定亂數種子以重現特定 task set。未指定則使用 OS 熵的真亂數。 |
-| (CLI 可選) target_f | 整數。指定 frame size (預設嘗試 4 → 3)。 |
-
 | 輸出 | 說明 |
 | --- | --- |
-| `output/task_set.json` | Periodic task 集合 (含 r, p, e, d, w, preempt) + `_meta` (seed, frame_size) |
+| `output/task_set.json` | Periodic task 集合 (含 r, p, e, d, w, preempt) |
 
 執行範例:
 ```bash
-python3 src/task_generator.py              # 隨機 seed
-python3 src/task_generator.py 42           # seed=42, 預設 frame size
-python3 src/task_generator.py 42 3         # seed=42, 強制 frame size=3
+python3 src/task_generator.py
 ```
 
 ### 4.2 src/scheduler.py — Level 1 日前靜態排程
@@ -110,20 +90,7 @@ python3 src/task_generator.py 42 3         # seed=42, 強制 frame size=3
 - **Phase 1**: 使用 PuLP CBC 解 ILP，僅處理 periodic tasks。目標函式為 `min α·f1 + f2 + f3`。
 - **Online Phase**: 依 release time 排序，逐一處理 sporadic (acceptance test) 與 aperiodic (force-place per C4)。每個工作用 `_find_min_cost` 找出能量成本最低的時段，並以「PV → 電池 → 機組 → sell」的優先序提交。電池放電會自動進行 SOC 補償 (在未來非充電時段增加 chg、減少 sell)，以維持 SOC 軌跡符合 C17 限制。
 
-### 4.3 src/evaluator.py — Level 1 效能評估
-
-| 輸入 | 說明 |
-| --- | --- |
-| `output/schedule_result.json` | Level 1 排程結果 |
-| `output/acceptance_test_log.json` | Sporadic + aperiodic 紀錄 |
-| `input/aperiodic_n_sporadic.json` | Demo 工作清單 (計算 sporadic_value_rate) |
-| `input/price_72hr.json` | 市場價格 (計算 market_revenue) |
-
-| 輸出 | 說明 |
-| --- | --- |
-| `output/evaluation_results.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
-
-### 4.4 src/advanced_scheduler.py — Level 2 動態排程
+### 4.3 src/advanced_scheduler.py — Level 2 動態排程
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -146,19 +113,31 @@ python3 src/task_generator.py 42 3         # seed=42, 強制 frame size=3
 - 滾動 ILP 只重新優化 dispatch (P, sell, gen on/off, battery)；工作的時段分配自到達時即鎖定。
 - 每小時結算時若實際 sell 低於 day-ahead 承諾，累積取消售電 penalty。
 
-### 4.5 src/verifier.py / verifier_advanced.py — 限制式驗證
+### 4.4 src/evaluator.py — Level 1 效能評估
 
 | 輸入 | 說明 |
 | --- | --- |
-| `output/schedule_result.json` (verifier) | L1 排程結果 |
-| `output/schedule_result_advanced.json` (verifier_advanced) | L2 排程結果 |
-| `output/task_set.json` | Periodic task 集合 |
-| `input/aperiodic_n_sporadic.json` | Sporadic + aperiodic 工作清單 |
+| `output/schedule_result.json` | Level 1 排程結果 |
+| `output/acceptance_test_log.json` | Sporadic + aperiodic 紀錄 |
+| `input/aperiodic_n_sporadic.json` | Demo 工作清單 (計算 sporadic_value_rate) |
+| `input/price_72hr.json` | 市場價格 (計算 market_revenue) |
 
 | 輸出 | 說明 |
 | --- | --- |
-| (僅 console 輸出) | 驗證通過或印出違規清單 |
+| `output/evaluation_results.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
 
+### 4.4 src/evaluator_advanced.py — Level 2 效能評估
+
+| 輸入 | 說明 |
+| --- | --- |
+| `output/schedule_result_advanced.json` | Level 2 排程結果 |
+| `output/acceptance_test_log_advanced.json` | Sporadic + aperiodic 紀錄 |
+| `input/aperiodic_n_sporadic.json` | Demo 工作清單 (計算 sporadic_value_rate) |
+| `input/price_72hr.json` | 市場價格 (計算 market_revenue) |
+
+| 輸出 | 說明 |
+| --- | --- |
+| `output/evaluation_results_advanced.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
 ---
 
 ## 5. 如何重現繳交的 output JSON
@@ -195,7 +174,7 @@ output/
 
 ### 注意事項
 
-- **`task_generator.py` 為隨機產生**: 預設使用 OS 熵取得真亂數 seed，每次執行可能產生不同的合法 task set。若要重現提交的 `task_set.json`，請從 `task_set.json` 的 `_meta.seed` 欄位讀取 seed，並透過 CLI 傳入: `python3 src/task_generator.py <seed>`。
+- **`task_generator.py` 為隨機產生**: 每次執行會產生不同的合法 task set。若要重現繳交版本的 `task_set.json`，請直接使用 `output/task_set.json`，不要重新執行 `task_generator.py`。
 - **CBC solver**: PuLP 內建，無需額外安裝。
 - **L1 與 L2 為前後相依**: `advanced_scheduler.py` 會讀取 `schedule_result.json` 當作初始計劃，因此 L2 執行前必須先跑過 `scheduler.py`。
 
@@ -212,9 +191,7 @@ virtual-power-plant-real-time-system/
 │   ├── scheduler.py                # Level 1 日前排程 (Phase 1 ILP + online_phase)
 │   ├── evaluator.py                # Level 1 效能評估
 │   ├── advanced_scheduler.py       # Level 2 動態排程
-│   ├── evaluator_advanced.py       # Level 2 效能評估
-│   ├── verifier.py                 # Level 1 限制式驗證
-│   └── verifier_advanced.py        # Level 2 限制式驗證
+│   └── evaluator_advanced.py       # Level 2 效能評估 
 ├── input/
 │   ├── processor_settings.json     # 發電設備參數
 │   ├── price_72hr.json             # 市場售電價格
