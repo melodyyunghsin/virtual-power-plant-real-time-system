@@ -33,7 +33,7 @@ pip install pulp
 
 ## 3. 程式執行流程
 
-依下列順序執行四個主程式即可重現所有提交的 JSON 輸出。所有指令請在專案根目錄下執行。
+依下列順序執行五個主程式即可重現所有提交的 JSON 輸出。所有指令請在專案根目錄下執行。
 
 ```bash
 # Step 1: 產生 periodic task set
@@ -53,7 +53,10 @@ python3 src/evaluator.py
 python3 src/advanced_scheduler.py
 # 產出: output/schedule_result_advanced.json
 #       output/acceptance_test_log_advanced.json
-#       output/evaluation_results_advanced.json
+
+# Step 5: Level 2 效能評估
+python3 src/evaluator_advanced.py
+# 產出: output/evaluation_results_advanced.json
 ```
 
 
@@ -103,7 +106,8 @@ python3 src/task_generator.py
 | --- | --- |
 | `output/schedule_result_advanced.json` | 動態執行 72 小時後的實際排程 |
 | `output/acceptance_test_log_advanced.json` | Sporadic / aperiodic 線上處理紀錄 |
-| `output/evaluation_results_advanced.json` | L2 評估結果 + 與 L1 比較 (`vs_static` block) |
+
+`output/evaluation_results_advanced.json` 由下一步 `evaluator_advanced.py` 產出。
 
 執行流程:
 - 每小時揭露 `pv_actual` 與即時電價，並在以下事件觸發 12 小時滾動視窗 ILP:
@@ -112,6 +116,12 @@ python3 src/task_generator.py
   - 每 6 小時例行刷新
 - 滾動 ILP 只重新優化 dispatch (P, sell, gen on/off, battery)；工作的時段分配自到達時即鎖定。
 - 每小時結算時若實際 sell 低於 day-ahead 承諾，累積取消售電 penalty。
+
+`schedule_result_advanced.json` 每個時段除 spec 附錄 G 所列必要欄位 (`t`, `P`, `k`, `sell`, `soc`, `missed_aperiodic`, `rejected_sporadic`) 外，另含以下 Level 2 延伸欄位 (依 spec §3.4 規定，於本說明文件中註明):
+- `pv_forecast`: 各 PV 在該時段的日前預測出力比例 (與 `processor_settings.json` 一致)。
+- `pv_actual`: 各 PV 在該時段揭露的實際出力比例 (放寬 Assumption 11)。
+- `day_ahead_commit`: 該時段在 L1 日前排程中承諾的售電量 (MWh)。
+- `cancellation_penalty`: 若實際 sell 低於 `day_ahead_commit`，本時段累積之取消售電罰金 ($)，對應放寬 Assumption 14。
 
 ### 4.4 src/evaluator.py — Level 1 效能評估
 
@@ -126,7 +136,7 @@ python3 src/task_generator.py
 | --- | --- |
 | `output/evaluation_results.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
 
-### 4.4 src/evaluator_advanced.py — Level 2 效能評估
+### 4.5 src/evaluator_advanced.py — Level 2 效能評估
 
 | 輸入 | 說明 |
 | --- | --- |
@@ -138,6 +148,11 @@ python3 src/task_generator.py
 | 輸出 | 說明 |
 | --- | --- |
 | `output/evaluation_results_advanced.json` | 評估指標: miss rate、tardiness、response time、jitter、objective value 等 |
+
+`evaluation_results_advanced.json` 前 10 個欄位完全對應 spec 附錄 H (`hard_deadline_miss_rate`、`soft_deadline_miss_rate`、`average_tardiness`、`max_tardiness`、`average_response_time`、`max_response_time`、`completion_time_jitter`、`generator_cost`、`market_revenue`、`objective_value`)。後續為 Level 2 延伸欄位 (依 spec §3.4 規定於本說明文件中註明):
+- `acceptance_test` / `sporadic_value_rate` / `post_acceptance_violation_rate`: 對應 rubric 4-2、4-3 的 sporadic 評估指標。
+- `relaxed_assumptions`: 放寬 assumptions (Renewable Uncertainty、Real Storage Operation、Flexible Market) 的對應參數與量化指標。
+- `vs_static`: 與 Level 1 靜態排程在三個目標函數 (gen cost、market revenue、objective) 與 miss rate、sporadic_value_rate 上的數值對照，對應 rubric 8-3。
 ---
 
 ## 5. 如何重現繳交的 output JSON
@@ -153,6 +168,7 @@ python3 src/task_generator.py
 python3 src/scheduler.py
 python3 src/evaluator.py
 python3 src/advanced_scheduler.py
+python3 src/evaluator_advanced.py
 
 # 驗證
 python3 src/verifier.py

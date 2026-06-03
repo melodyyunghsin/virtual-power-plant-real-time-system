@@ -414,7 +414,6 @@ def phase1_static_schedule(proc, pv_forecast, price_arr, real_jobs):
             "k":                 {},
             "sell":              round(val(sell[t]), 4),
             "soc":               {b: round(val(soc[b][t]), 4) for b in bat_ids},
-            "pv_forecast":       {pv: round(pv_forecast[pv][t], 4) for pv in pv_ids},
             "missed_aperiodic":  [],
             "rejected_sporadic": [],
         }

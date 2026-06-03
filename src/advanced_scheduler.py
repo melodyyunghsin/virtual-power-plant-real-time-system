@@ -1448,10 +1448,9 @@ class AdvancedScheduler:
                 "vs_static": vs_static,
             },
         }
-        eval_path = OUTPUT_DIR / "evaluation_results_advanced.json"
-        with open(eval_path, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2)
-        print(f"  wrote {eval_path}")
+        # Note: evaluation_results_advanced.json is written by
+        # evaluator_advanced.py (canonical, spec-compliant). This `results`
+        # dict is returned for use in main()'s stdout summary only.
         return results
 
 

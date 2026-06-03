@@ -170,18 +170,21 @@ def main():
     max_response_time = max(response_vals) if response_vals else 0.0
 
     # ── METRIC: completion_time_jitter ───────────────────────────────────────
-    # Defined as the population std of response times (R_j = C_j - r_j) across
-    # instances of the same periodic task. Raw completion times span the whole
-    # horizon and would yield meaninglessly large numbers.
+    # Per spec example (appendix H), reported as a single scalar. Defined as
+    # the mean of the population std of response times R_j = C_j - r_j across
+    # instances of each periodic task.
     response_by_task: dict[str, list[int]] = {}
     for j in periodic_instances:
         response_by_task.setdefault(j["task_id"], []).append(
             j["completion"] - j["release"]
         )
-    completion_time_jitter = {
-        tid: round(population_std(rs), 4)
-        for tid, rs in response_by_task.items()
-    }
+    per_task_jitter = [
+        population_std(rs) for rs in response_by_task.values()
+    ]
+    completion_time_jitter = (
+        round(sum(per_task_jitter) / len(per_task_jitter), 4)
+        if per_task_jitter else 0.0
+    )
 
     # ── METRIC: acceptance_test ──────────────────────────────────────────────
     acceptance_test = {
@@ -245,115 +248,25 @@ def main():
     f3 = -market_revenue
     objective_value = alpha * f1 + f2 + f3
 
-    # ── METRIC: relaxed_assumptions (Level 2 storage metrics) ────────────────
-    bat_cfg = {b["storage_id"]: b for b in proc["storage"]}
-    total_aging_cost = 0.0
-    soc_dep_binding_hours = 0
-    for slot in schedule:
-        t_slot = slot["t"]
-        for bid, bat in bat_cfg.items():
-            dis_val = slot.get("P", {}).get(bid, 0.0)
-            aging = float(bat.get("aging_cost", 0.0))
-            total_aging_cost += aging * dis_val
-            prev_soc = (schedule[t_slot - 2]["soc"].get(bid, bat["soc_init"])
-                        if t_slot > 1 else bat["soc_init"])
-            if prev_soc < 0.3 * bat["soc_max"]:
-                soc_dep_binding_hours += 1
-
-    # ── renewable uncertainty metrics (Assumption I) ──────────────────────────
-    ren_cfg     = {r["renewable_id"]: r for r in proc["renewable_capacity"]}
-    pv_fc_map   = {}   # {pv_id: {hour: pv_forecast}}
-    pv_act_map  = {}   # {pv_id: {hour: pv_actual}}
-    err_std_val = 0.08
-    for entry in proc["renewable_forecast"]:
-        for pv_id, points in entry.items():
-            pv_fc_map[pv_id]  = {int(v["hour"]): float(v["pv_forecast"])   for v in points}
-            pv_act_map[pv_id] = {int(v["hour"]): float(v.get("pv_actual", v["pv_forecast"])) for v in points}
-
-    total_forecast_MWh   = 0.0
-    total_actual_MWh     = 0.0
-    total_abs_error_MWh  = 0.0
-    hours_shortfall      = 0
-    hours_surplus        = 0
-    robust_reduction_MWh = 0.0
-
-    for pv_id, cap_info in ren_cfg.items():
-        cap = float(cap_info["capacity"])
-        for t in range(1, H + 1):
-            fc  = pv_fc_map.get(pv_id, {}).get(t, 0.0)
-            act = pv_act_map.get(pv_id, {}).get(t, fc)
-            total_forecast_MWh  += cap * fc
-            total_actual_MWh    += cap * act
-            total_abs_error_MWh += cap * abs(act - fc)
-            if act < fc - 1e-6:
-                hours_shortfall += 1
-            elif act > fc + 1e-6:
-                hours_surplus   += 1
-            robust_reduction_MWh += cap * fc * err_std_val
-
-    renewable_uncertainty = {
-        "forecast_error_std":        err_std_val,
-        "total_forecast_MWh":        round(total_forecast_MWh, 2),
-        "total_actual_MWh":          round(total_actual_MWh, 2),
-        "total_absolute_error_MWh":  round(total_abs_error_MWh, 2),
-        "hours_with_shortfall":      hours_shortfall,
-        "hours_with_surplus":        hours_surplus,
-        "robust_tightening_total_MWh": round(robust_reduction_MWh, 2),
-    }
-
-    # ── market mechanism metrics (Assumption III) ─────────────────────────────
-    # rt_factors and cancel_rate already parsed above for market_revenue
-    total_commit = sum(slot.get("day_ahead_commit", slot.get("sell", 0.0))
-                       for slot in schedule)
-    total_sell   = sum(slot.get("sell", 0.0) for slot in schedule)
-    # penalty = sum(cancel_rate * price * max(0, commit - sell)) — 0 in static mode
-    total_penalty = sum(
-        cancel_rate * price_map.get(slot["t"], 0.0)
-        * max(0.0, slot.get("day_ahead_commit", 0.0) - slot.get("sell", 0.0))
-        for slot in schedule
-    )
-    rt_vals = list(rt_factors.values())
-    market_mechanism = {
-        "cancellation_penalty_rate": cancel_rate,
-        "total_day_ahead_commit_MWh": round(total_commit, 4),
-        "total_realtime_sell_MWh":    round(total_sell, 4),
-        "total_cancellation_penalty": round(total_penalty, 2),
-        "net_market_revenue":         round(market_revenue - total_penalty, 2),
-        "realtime_price_stats": {
-            "min_factor": round(min(rt_vals), 4),
-            "max_factor": round(max(rt_vals), 4),
-            "avg_factor": round(sum(rt_vals) / len(rt_vals), 4),
-        },
-    }
-
-    relaxed_assumptions = {
-        "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
-        "charge_efficiency": 0.95,
-        "discharge_efficiency": 0.92,
-        "self_discharge_rate": 0.002,
-        "aging_cost_per_MWh": 8.0,
-        "total_aging_cost": round(total_aging_cost, 2),
-        "soc_dep_discharge_binding_hours": soc_dep_binding_hours,
-        "market_mechanism": market_mechanism,
-        "renewable_uncertainty": renewable_uncertainty,
-    }
-
-    # ── assemble results dict ─────────────────────────────────────────────────
+    # ── assemble results dict (L1: schema follows spec appendix H) ───────────
+    # First 10 keys exactly match the spec example. The remaining three
+    # (acceptance_test, sporadic_value_rate, post_acceptance_violation_rate)
+    # are documented spec fields (appendix H description table) needed by
+    # rubric 4-2/4-3 — they are appended after the mandatory block.
     results = {
-        "hard_deadline_miss_rate":       round(hard_deadline_miss_rate, 6),
-        "soft_deadline_miss_rate":       round(soft_deadline_miss_rate, 6),
-        "average_tardiness":             round(avg_tardiness, 4),
-        "max_tardiness":                 round(max_tardiness, 4),
-        "average_response_time":         round(avg_response_time, 4),
-        "max_response_time":             round(max_response_time, 4),
-        "completion_time_jitter":        completion_time_jitter,
-        "acceptance_test":               acceptance_test,
-        "sporadic_value_rate":           sporadic_value_rate,
+        "hard_deadline_miss_rate":        round(hard_deadline_miss_rate, 6),
+        "soft_deadline_miss_rate":        round(soft_deadline_miss_rate, 6),
+        "average_tardiness":              round(avg_tardiness, 4),
+        "max_tardiness":                  round(max_tardiness, 4),
+        "average_response_time":          round(avg_response_time, 4),
+        "max_response_time":              round(max_response_time, 4),
+        "completion_time_jitter":         completion_time_jitter,
+        "generator_cost":                 round(generator_cost, 2),
+        "market_revenue":                 round(market_revenue, 2),
+        "objective_value":                round(objective_value, 2),
+        "acceptance_test":                acceptance_test,
+        "sporadic_value_rate":            sporadic_value_rate,
         "post_acceptance_violation_rate": round(post_acceptance_violation_rate, 6),
-        "generator_cost":                round(generator_cost, 2),
-        "market_revenue":                round(market_revenue, 2),
-        "objective_value":               round(objective_value, 2),
-        "relaxed_assumptions":           relaxed_assumptions,
     }
 
     out_path = os.path.join(BASE, "output", "evaluation_results.json")
@@ -405,10 +318,12 @@ def main():
     print(f"  max_response_time:      {max_response_time:.4f} h")
 
     print(f"\n── Completion-Time Jitter (population std of response time) ──")
-    for tid in sorted(completion_time_jitter):
-        rs = response_by_task.get(tid, [])
-        print(f"  {tid}: {completion_time_jitter[tid]:.4f} h  "
-              f"(R_j: {rs})")
+    print(f"  completion_time_jitter (mean of per-task std):  "
+          f"{completion_time_jitter:.4f} h")
+    for tid in sorted(response_by_task):
+        rs = response_by_task[tid]
+        per_task = population_std(rs)
+        print(f"    {tid}: {per_task:.4f} h  (R_j: {rs})")
 
     print(f"\n── Sporadic Acceptance Test ──")
     print(f"  Total arrived:  {acceptance_test['total']}")

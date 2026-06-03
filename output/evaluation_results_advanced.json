@@ -5,17 +5,10 @@
   "max_tardiness": 0,
   "average_response_time": 5.1552,
   "max_response_time": 15,
-  "completion_time_jitter": {
-    "p1": 3.8324,
-    "p2": 0.0,
-    "p3": 5.5227,
-    "p4": 3.4911,
-    "p5": 0.8749,
-    "p6": 2.0,
-    "p7": 0.0,
-    "p8": 1.6997,
-    "p9": 2.1213
-  },
+  "completion_time_jitter": 2.1713,
+  "generator_cost": 303300.0,
+  "market_revenue": 350455.06,
+  "objective_value": -47155.06,
   "acceptance_test": {
     "total": 6,
     "accepted": 4,
@@ -23,9 +16,6 @@
   },
   "sporadic_value_rate": 0.6428571428571429,
   "post_acceptance_violation_rate": 0.0,
-  "generator_cost": 303300.0,
-  "market_revenue": 350455.06,
-  "objective_value": -47155.06,
   "relaxed_assumptions": {
     "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
     "charge_efficiency": 0.95,
@@ -55,5 +45,19 @@
       "hours_with_surplus": 38,
       "robust_tightening_total_MWh": 121.97
     }
+  },
+  "vs_static": {
+    "objective_value_static": -66479.4,
+    "objective_value_dynamic": -47155.06,
+    "generator_cost_static": 282070.0,
+    "generator_cost_dynamic": 303300.0,
+    "generator_cost_change": 21230.0,
+    "market_revenue_static": 348549.4,
+    "market_revenue_dynamic": 350455.06,
+    "market_revenue_change": 1905.66,
+    "soft_miss_rate_static": 0.0,
+    "soft_miss_rate_dynamic": 0.0,
+    "sporadic_value_rate_static": 0.8571428571428571,
+    "sporadic_value_rate_dynamic": 0.6428571428571429
   }
 }

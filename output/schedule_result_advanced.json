@@ -13,14 +13,14 @@
         "battery_1": 23.1709,
         "battery_2": 10.02
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 50.0,
       "cancellation_penalty": 31.8629,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -42,14 +42,14 @@
         "battery_1": 20,
         "battery_2": 10
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 25.0,
       "cancellation_penalty": 48.4591,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -76,14 +76,14 @@
         "battery_1": 38.96,
         "battery_2": 24.23
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -107,14 +107,14 @@
         "battery_1": 38.8821,
         "battery_2": 29.3115
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 44.6,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -141,14 +141,14 @@
         "battery_1": 38.8043,
         "battery_2": 29.2529
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 21.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -172,14 +172,14 @@
         "battery_1": 38.7267,
         "battery_2": 29.1944
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 28.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -208,14 +208,14 @@
         "battery_1": 20.0822,
         "battery_2": 26.4099
       },
-      "pv_forecast": {
-        "pv_1": 0.03,
-        "pv_2": 0.03
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 102.2,
       "cancellation_penalty": 14.0979,
+      "pv_forecast": {
+        "pv_1": 0.03,
+        "pv_2": 0.03
+      },
       "pv_actual": {
         "pv_1": 0.0276,
         "pv_2": 0.0293
@@ -239,14 +239,14 @@
         "battery_1": 23.0896,
         "battery_2": 26.3571
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 132.4,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.16,
+        "pv_2": 0.16
+      },
       "pv_actual": {
         "pv_1": 0.1553,
         "pv_2": 0.1693
@@ -267,14 +267,14 @@
         "battery_1": 23.0434,
         "battery_2": 13.4733
       },
-      "pv_forecast": {
-        "pv_1": 0.25,
-        "pv_2": 0.25
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 130.0,
       "cancellation_penalty": 90.1196,
+      "pv_forecast": {
+        "pv_1": 0.25,
+        "pv_2": 0.25
+      },
       "pv_actual": {
         "pv_1": 0.2758,
         "pv_2": 0.2248
@@ -311,14 +311,14 @@
         "battery_1": 41.9974,
         "battery_2": 27.6964
       },
-      "pv_forecast": {
-        "pv_1": 0.3,
-        "pv_2": 0.3
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 15.0,
       "cancellation_penalty": 47.376,
+      "pv_forecast": {
+        "pv_1": 0.3,
+        "pv_2": 0.3
+      },
       "pv_actual": {
         "pv_1": 0.3047,
         "pv_2": 0.3343
@@ -352,16 +352,16 @@
         "battery_1": 56.7562,
         "battery_2": 41.891
       },
-      "pv_forecast": {
-        "pv_1": 0.23,
-        "pv_2": 0.23
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [
         "s2"
       ],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.23,
+        "pv_2": 0.23
+      },
       "pv_actual": {
         "pv_1": 0.2469,
         "pv_2": 0.2271
@@ -394,14 +394,14 @@
         "battery_1": 75.6427,
         "battery_2": 56.0572
       },
-      "pv_forecast": {
-        "pv_1": 0.27,
-        "pv_2": 0.27
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.27,
+        "pv_2": 0.27
+      },
       "pv_actual": {
         "pv_1": 0.2825,
         "pv_2": 0.2554
@@ -433,14 +433,14 @@
         "battery_1": 85.7286,
         "battery_2": 55.9451
       },
-      "pv_forecast": {
-        "pv_1": 0.27,
-        "pv_2": 0.27
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.27,
+        "pv_2": 0.27
+      },
       "pv_actual": {
         "pv_1": 0.2563,
         "pv_2": 0.2562
@@ -473,14 +473,14 @@
         "battery_1": 80.6888,
         "battery_2": 48.4732
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.16,
+        "pv_2": 0.16
+      },
       "pv_actual": {
         "pv_1": 0.1669,
         "pv_2": 0.1592
@@ -508,14 +508,14 @@
         "battery_1": 66.5796,
         "battery_2": 48.3762
       },
-      "pv_forecast": {
-        "pv_1": 0.11,
-        "pv_2": 0.11
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.11,
+        "pv_2": 0.11
+      },
       "pv_actual": {
         "pv_1": 0.1072,
         "pv_2": 0.1065
@@ -545,14 +545,14 @@
         "battery_1": 44.7074,
         "battery_2": 45.8099
       },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.06,
+        "pv_2": 0.06
+      },
       "pv_actual": {
         "pv_1": 0.0585,
         "pv_2": 0.071
@@ -582,14 +582,14 @@
         "battery_1": 44.6179,
         "battery_2": 35.014
       },
-      "pv_forecast": {
-        "pv_1": 0.04,
-        "pv_2": 0.04
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.04,
+        "pv_2": 0.04
+      },
       "pv_actual": {
         "pv_1": 0.0403,
         "pv_2": 0.0377
@@ -623,14 +623,14 @@
         "battery_1": 47.3536,
         "battery_2": 45.0998
       },
-      "pv_forecast": {
-        "pv_1": 0.02,
-        "pv_2": 0.02
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.02,
+        "pv_2": 0.02
+      },
       "pv_actual": {
         "pv_1": 0.0176,
         "pv_2": 0.0201
@@ -657,14 +657,14 @@
         "battery_1": 61.5089,
         "battery_2": 45.0096
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -694,14 +694,14 @@
         "battery_1": 78.4859,
         "battery_2": 59.1696
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -721,14 +721,14 @@
         "battery_1": 77.6824,
         "battery_2": 42.7469
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 116.0,
       "cancellation_penalty": 139.4542,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -756,14 +756,14 @@
         "battery_1": 55.7879,
         "battery_2": 26.3571
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 131.0,
       "cancellation_penalty": 32.4,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -800,14 +800,14 @@
         "battery_1": 33.9372,
         "battery_2": 10
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 131.0,
       "cancellation_penalty": 1015.2,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -845,14 +845,14 @@
         "battery_1": 33.8693,
         "battery_2": 10.93
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 59.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -883,14 +883,14 @@
         "battery_1": 20,
         "battery_2": 10
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 106.0,
       "cancellation_penalty": 279.4689,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -919,14 +919,14 @@
         "battery_1": 38.96,
         "battery_2": 24.23
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 15.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -950,14 +950,14 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 88.0,
       "cancellation_penalty": 14.3049,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -984,14 +984,14 @@
         "battery_1": 37.06,
         "battery_2": 24.23
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 33.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1012,14 +1012,14 @@
         "battery_1": 36.9859,
         "battery_2": 24.1816
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 27.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1046,14 +1046,14 @@
         "battery_1": 38.8987,
         "battery_2": 37.5981
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 27.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1081,14 +1081,14 @@
         "battery_1": 38.8209,
         "battery_2": 23.4455
       },
-      "pv_forecast": {
-        "pv_1": 0.02,
-        "pv_2": 0.02
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 98.8,
       "cancellation_penalty": 170.5961,
+      "pv_forecast": {
+        "pv_1": 0.02,
+        "pv_2": 0.02
+      },
       "pv_actual": {
         "pv_1": 0.0219,
         "pv_2": 0.02
@@ -1108,14 +1108,14 @@
         "battery_1": 38.7432,
         "battery_2": 23.3986
       },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 116.2,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.08,
+        "pv_2": 0.08
+      },
       "pv_actual": {
         "pv_1": 0.0757,
         "pv_2": 0.0802
@@ -1145,14 +1145,14 @@
         "battery_1": 20,
         "battery_2": 10
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 132.4,
       "cancellation_penalty": 147.5708,
+      "pv_forecast": {
+        "pv_1": 0.16,
+        "pv_2": 0.16
+      },
       "pv_actual": {
         "pv_1": 0.1728,
         "pv_2": 0.1607
@@ -1194,14 +1194,14 @@
         "battery_1": 20,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.1,
-        "pv_2": 0.1
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.1,
+        "pv_2": 0.1
+      },
       "pv_actual": {
         "pv_1": 0.1011,
         "pv_2": 0.0961
@@ -1244,14 +1244,14 @@
         "battery_1": 22.8708,
         "battery_2": 24.23
       },
-      "pv_forecast": {
-        "pv_1": 0.28,
-        "pv_2": 0.28
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.28,
+        "pv_2": 0.28
+      },
       "pv_actual": {
         "pv_1": 0.3143,
         "pv_2": 0.2669
@@ -1285,14 +1285,14 @@
         "battery_1": 41.8251,
         "battery_2": 24.9017
       },
-      "pv_forecast": {
-        "pv_1": 0.12,
-        "pv_2": 0.12
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.12,
+        "pv_2": 0.12
+      },
       "pv_actual": {
         "pv_1": 0.1137,
         "pv_2": 0.1117
@@ -1323,14 +1323,14 @@
         "battery_1": 60.2805,
         "battery_2": 29.7208
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.16,
+        "pv_2": 0.16
+      },
       "pv_actual": {
         "pv_1": 0.156,
         "pv_2": 0.141
@@ -1355,14 +1355,14 @@
         "battery_1": 65.7535,
         "battery_2": 33.8566
       },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.08,
+        "pv_2": 0.08
+      },
       "pv_actual": {
         "pv_1": 0.0822,
         "pv_2": 0.0814
@@ -1388,14 +1388,14 @@
         "battery_1": 73.8262,
         "battery_2": 33.7889
       },
-      "pv_forecast": {
-        "pv_1": 0.13,
-        "pv_2": 0.13
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.13,
+        "pv_2": 0.13
+      },
       "pv_actual": {
         "pv_1": 0.107,
         "pv_2": 0.1402
@@ -1426,14 +1426,14 @@
         "battery_1": 73.6785,
         "battery_2": 37.8101
       },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.08,
+        "pv_2": 0.08
+      },
       "pv_actual": {
         "pv_1": 0.0853,
         "pv_2": 0.0765
@@ -1467,14 +1467,14 @@
         "battery_1": 81.7278,
         "battery_2": 37.7345
       },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.06,
+        "pv_2": 0.06
+      },
       "pv_actual": {
         "pv_1": 0.0674,
         "pv_2": 0.0573
@@ -1508,14 +1508,14 @@
         "battery_1": 81.5643,
         "battery_2": 50.5828
       },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.06,
+        "pv_2": 0.06
+      },
       "pv_actual": {
         "pv_1": 0.0654,
         "pv_2": 0.0585
@@ -1552,14 +1552,14 @@
         "battery_1": 95.9248,
         "battery_2": 50.4816
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.01,
+        "pv_2": 0.01
+      },
       "pv_actual": {
         "pv_1": 0.0106,
         "pv_2": 0.0096
@@ -1598,14 +1598,14 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1635,14 +1635,14 @@
         "battery_1": 99.8,
         "battery_2": 59.88
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 14.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1661,14 +1661,14 @@
         "battery_1": 77.8612,
         "battery_2": 43.4559
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 110.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1706,14 +1706,14 @@
         "battery_1": 75.5316,
         "battery_2": 43.369
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1749,14 +1749,14 @@
         "battery_1": 83.9305,
         "battery_2": 43.2822
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1779,14 +1779,14 @@
         "battery_1": 70.7192,
         "battery_2": 26.8913
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 93.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1805,14 +1805,14 @@
         "battery_1": 48.8386,
         "battery_2": 13.7941
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 107.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1839,14 +1839,14 @@
         "battery_1": 54.441,
         "battery_2": 28.0165
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 36.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1870,14 +1870,14 @@
         "battery_1": 73.3321,
         "battery_2": 42.2104
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 37.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1904,14 +1904,14 @@
         "battery_1": 92.1854,
         "battery_2": 56.376
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 28.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -1943,14 +1943,14 @@
         "battery_1": 100,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 71.6,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.01,
+        "pv_2": 0.01
+      },
       "pv_actual": {
         "pv_1": 0.0099,
         "pv_2": 0.0089
@@ -1976,14 +1976,14 @@
         "battery_1": 78.0609,
         "battery_2": 43.5756
       },
-      "pv_forecast": {
-        "pv_1": 0.14,
-        "pv_2": 0.14
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 160.6,
       "cancellation_penalty": 44.2176,
+      "pv_forecast": {
+        "pv_1": 0.14,
+        "pv_2": 0.14
+      },
       "pv_actual": {
         "pv_1": 0.1544,
         "pv_2": 0.1553
@@ -2005,14 +2005,14 @@
         "battery_1": 56.1656,
         "battery_2": 27.1841
       },
-      "pv_forecast": {
-        "pv_1": 0.35,
-        "pv_2": 0.35
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 199.0,
       "cancellation_penalty": 123.48,
+      "pv_forecast": {
+        "pv_1": 0.35,
+        "pv_2": 0.35
+      },
       "pv_actual": {
         "pv_1": 0.3801,
         "pv_2": 0.3623
@@ -2034,14 +2034,14 @@
         "battery_1": 34.3142,
         "battery_2": 10.8254
       },
-      "pv_forecast": {
-        "pv_1": 0.57,
-        "pv_2": 0.57
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 229.8,
       "cancellation_penalty": 46.2378,
+      "pv_forecast": {
+        "pv_1": 0.57,
+        "pv_2": 0.57
+      },
       "pv_actual": {
         "pv_1": 0.5879,
         "pv_2": 0.5375
@@ -2067,14 +2067,14 @@
         "battery_1": 20,
         "battery_2": 10
       },
-      "pv_forecast": {
-        "pv_1": 0.8,
-        "pv_2": 0.8
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 237.0,
       "cancellation_penalty": 126.0332,
+      "pv_forecast": {
+        "pv_1": 0.8,
+        "pv_2": 0.8
+      },
       "pv_actual": {
         "pv_1": 0.8003,
         "pv_2": 0.819
@@ -2111,14 +2111,14 @@
         "battery_1": 20,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.96,
-        "pv_2": 0.96
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 152.4,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.96,
+        "pv_2": 0.96
+      },
       "pv_actual": {
         "pv_1": 0.9322,
         "pv_2": 0.9263
@@ -2154,14 +2154,14 @@
         "battery_1": 20,
         "battery_2": 17.4279
       },
-      "pv_forecast": {
-        "pv_1": 0.98,
-        "pv_2": 0.98
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 128.2,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.98,
+        "pv_2": 0.98
+      },
       "pv_actual": {
         "pv_1": 0.8835,
         "pv_2": 0.9634
@@ -2193,14 +2193,14 @@
         "battery_1": 38.96,
         "battery_2": 31.6431
       },
-      "pv_forecast": {
-        "pv_1": 1.0,
-        "pv_2": 1.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 119.0,
       "cancellation_penalty": 144.0,
+      "pv_forecast": {
+        "pv_1": 1.0,
+        "pv_2": 1.0
+      },
       "pv_actual": {
         "pv_1": 1.0,
         "pv_2": 1.0
@@ -2251,14 +2251,14 @@
         "battery_1": 57.8821,
         "battery_2": 45.8298
       },
-      "pv_forecast": {
-        "pv_1": 0.95,
-        "pv_2": 0.95
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 13.4,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.95,
+        "pv_2": 0.95
+      },
       "pv_actual": {
         "pv_1": 0.7849,
         "pv_2": 1.0
@@ -2305,14 +2305,14 @@
         "battery_1": 71.1043,
         "battery_2": 45.7381
       },
-      "pv_forecast": {
-        "pv_1": 0.8,
-        "pv_2": 0.8
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.8,
+        "pv_2": 0.8
+      },
       "pv_actual": {
         "pv_1": 0.7763,
         "pv_2": 0.8972
@@ -2353,14 +2353,14 @@
         "battery_1": 89.9621,
         "battery_2": 55.1638
       },
-      "pv_forecast": {
-        "pv_1": 0.6,
-        "pv_2": 0.6
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.6,
+        "pv_2": 0.6
+      },
       "pv_actual": {
         "pv_1": 0.6079,
         "pv_2": 0.6818
@@ -2397,14 +2397,14 @@
         "battery_1": 100,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.36,
-        "pv_2": 0.36
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 0.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.36,
+        "pv_2": 0.36
+      },
       "pv_actual": {
         "pv_1": 0.3848,
         "pv_2": 0.3528
@@ -2437,14 +2437,14 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.12,
-        "pv_2": 0.12
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 16.8,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.12,
+        "pv_2": 0.12
+      },
       "pv_actual": {
         "pv_1": 0.1369,
         "pv_2": 0.1152
@@ -2483,14 +2483,14 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 22.4,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.01,
+        "pv_2": 0.01
+      },
       "pv_actual": {
         "pv_1": 0.0108,
         "pv_2": 0.0101
@@ -2514,14 +2514,14 @@
         "battery_1": 85.6398,
         "battery_2": 59.1898
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 114.0,
       "cancellation_penalty": 323.1244,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -2541,14 +2541,14 @@
         "battery_1": 63.7294,
         "battery_2": 42.767
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 150.0,
       "cancellation_penalty": 0.0,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -2576,14 +2576,14 @@
         "battery_1": 41.8628,
         "battery_2": 26.3771
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 141.0,
       "cancellation_penalty": 305.1,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -2616,14 +2616,14 @@
         "battery_1": 20.04,
         "battery_2": 10.02
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 117.0,
       "cancellation_penalty": 278.1,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0
@@ -2657,14 +2657,14 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": [],
       "day_ahead_commit": 71.0,
       "cancellation_penalty": 0.0028,
+      "pv_forecast": {
+        "pv_1": 0.0,
+        "pv_2": 0.0
+      },
       "pv_actual": {
         "pv_1": 0.0,
         "pv_2": 0.0

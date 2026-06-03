@@ -251,6 +251,29 @@ for t in 1..72:
 - 若實際 sell < `locked_commit` → 累計 cancellation penalty
 - 用 L2 電池動態更新 SOC: `SOC[t] = SOC[t-1] · (1-σ) + chg · η_c − dis / η_d`
 
+#### 3.2.6 Level 2 輸出檔案延伸欄位說明
+
+Spec §3.4 規定 Level 2 延伸仍須使用相同輸出格式, 如有額外欄位必須於說明文件中註明。Level 1 之 `schedule_result.json` 與 `evaluation_results.json` 完全比照 spec 附錄 G / H 範例輸出, 不含任何額外欄位。Level 2 的兩個輸出檔在保留全部 spec 必要欄位的前提下, 增加以下延伸欄位:
+
+**`schedule_result_advanced.json` 每個時段除附錄 G 必要欄位 (`t`, `P`, `k`, `sell`, `soc`, `missed_aperiodic`, `rejected_sporadic`) 外, 額外包含:**
+
+| 欄位 | 對應放寬之 Assumption | 說明 |
+|---|---|---|
+| `pv_forecast` | I. 再生能源不確定性 | 各 PV 在該時段的日前預測出力比例, 供 replan ILP 使用 robust 邊界 |
+| `pv_actual` | I. 再生能源不確定性 | 各 PV 在該時段揭露的實際出力比例, 供當前時段 dispatch 上限 |
+| `day_ahead_commit` | III. 彈性市場機制 | L1 日前承諾的售電量 (MWh), 結算時用於判斷取消售電量 |
+| `cancellation_penalty` | III. 彈性市場機制 | 該時段若實際 sell 低於 `day_ahead_commit` 累積之取消售電罰金 ($) |
+
+**`evaluation_results_advanced.json` 前 10 個欄位完全對應 spec 附錄 H 範例 (`hard_deadline_miss_rate`、`soft_deadline_miss_rate`、`average_tardiness`、`max_tardiness`、`average_response_time`、`max_response_time`、`completion_time_jitter`、`generator_cost`、`market_revenue`、`objective_value`), 後續為以下延伸欄位:**
+
+| 欄位 | 用途 |
+|---|---|
+| `acceptance_test` | 對應 rubric 4-1/4-2: sporadic 接受/拒絕統計 |
+| `sporadic_value_rate` | 對應 rubric 4-3: 完成 sporadic execution time 占比 |
+| `post_acceptance_violation_rate` | 對應 rubric 4-2: 接受後造成違規之比例 |
+| `relaxed_assumptions` | 列出三項放寬 assumption 對應的參數值與量化指標 (aging cost、forecast error、cancellation penalty 等) |
+| `vs_static` | 對應 rubric 8-3: 與 Level 1 在三個目標函數、miss rate、sporadic_value_rate 的數值比對 |
+
 ---
 
 ## 4. 效能分析
@@ -269,9 +292,9 @@ for t in 1..72:
 | average_response_time | 5.44 h | 5-4 |
 | max_response_time | 15 h | 5-4 |
 | **sporadic_value_rate** | **85.71%** (12/14, 滿分 ≥ 70%) | 4-3 |
-| completion_time_jitter | (見下表) | 5-5 |
+| completion_time_jitter | 2.1713 h | 5-5 |
 
-Completion-time jitter (per task):
+`completion_time_jitter` 依規格附錄 H 範例以單一純量輸出。實作上對每個 periodic task 計算其所有 instance 之 response time `R_j = C_j − r_j` 的母體標準差, 再取所有 task 的平均值。各 task 的細項如下:
 
 | Task | jitter | Task | jitter |
 |---|---|---|---|
@@ -380,7 +403,7 @@ ILP 在 minimize f2 + f3 時自動權衡:
 
 - **所有 jobs 安排結果**: 10 個 aperiodic 全部 on-time 完成、4 個 sporadic 接受 (s2、s5 因 infeasibility 拒絕)、44 個 periodic instance 全部在 deadline 前完成
 - **Hard deadline jobs**: 100% 在期限前完成 (miss rate = 0%)
-- **系統資源限制**: 所有時段供需平衡 (C23), 驗證器零違規
+- **系統資源限制**: 所有時段供需平衡 (C23), 全部 constraints C1、C5–C7、C9–C19、C21–C23 通過檢查
 - **儲能狀態**: SOC 全程維持在 `[soc_min, soc_max]` 區間
 - **過程中事件**: 27 次 replan 觸發, 累計違約罰金 $3,421.21
 
@@ -466,7 +489,7 @@ L2 sporadic_value_rate 較低是「真實電池模型」帶來的結果, 而非 
 
 | 檔案 | 內容 |
 |---|---|
-| `src/task_generator.py` | Periodic task set 隨機產生 (CLI 支援 seed 與 target_f) |
+| `src/task_generator.py` | Periodic task set 隨機產生 |
 | `src/scheduler.py` | Level 1 Phase 1 ILP + online phase (含電池 SOC 補償) |
 | `src/evaluator.py` | Level 1 評估指標計算 |
 | `src/advanced_scheduler.py` | Level 2 動態滾動排程 |

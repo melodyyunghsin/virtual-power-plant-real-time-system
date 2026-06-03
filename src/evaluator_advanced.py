@@ -170,18 +170,21 @@ def main():
     max_response_time = max(response_vals) if response_vals else 0.0
 
     # ── METRIC: completion_time_jitter ───────────────────────────────────────
-    # Defined as the population std of response times (R_j = C_j - r_j) across
-    # instances of the same periodic task. Raw completion times span the whole
-    # horizon and would yield meaninglessly large numbers.
+    # Per spec example (appendix H), reported as a single scalar. Defined as
+    # the mean of the population std of response times R_j = C_j - r_j across
+    # instances of each periodic task.
     response_by_task: dict[str, list[int]] = {}
     for j in periodic_instances:
         response_by_task.setdefault(j["task_id"], []).append(
             j["completion"] - j["release"]
         )
-    completion_time_jitter = {
-        tid: round(population_std(rs), 4)
-        for tid, rs in response_by_task.items()
-    }
+    per_task_jitter = [
+        population_std(rs) for rs in response_by_task.values()
+    ]
+    completion_time_jitter = (
+        round(sum(per_task_jitter) / len(per_task_jitter), 4)
+        if per_task_jitter else 0.0
+    )
 
     # ── METRIC: acceptance_test ──────────────────────────────────────────────
     acceptance_test = {
@@ -338,7 +341,40 @@ def main():
         "renewable_uncertainty": renewable_uncertainty,
     }
 
+    # ── vs_static block: compare L2 dynamic output with L1 static ────────────
+    vs_static = {}
+    static_eval_path = os.path.join(BASE, "output", "evaluation_results.json")
+    if os.path.exists(static_eval_path):
+        try:
+            with open(static_eval_path, encoding="utf-8") as f:
+                static_eval = json.load(f)
+            stat_gc  = static_eval.get("generator_cost")
+            stat_mr  = static_eval.get("market_revenue")
+            stat_obj = static_eval.get("objective_value")
+            stat_smr = static_eval.get("soft_deadline_miss_rate")
+            stat_svr = static_eval.get("sporadic_value_rate")
+            vs_static = {
+                "objective_value_static":   stat_obj,
+                "objective_value_dynamic":  round(objective_value, 2),
+                "generator_cost_static":    stat_gc,
+                "generator_cost_dynamic":   round(generator_cost, 2),
+                "generator_cost_change":    round(generator_cost - (stat_gc or 0), 2),
+                "market_revenue_static":    stat_mr,
+                "market_revenue_dynamic":   round(market_revenue, 2),
+                "market_revenue_change":    round(market_revenue - (stat_mr or 0), 2),
+                "soft_miss_rate_static":    stat_smr,
+                "soft_miss_rate_dynamic":   round(soft_deadline_miss_rate, 6),
+                "sporadic_value_rate_static":  stat_svr,
+                "sporadic_value_rate_dynamic": sporadic_value_rate,
+            }
+        except Exception as exc:  # pragma: no cover
+            vs_static = {"error_reading_static": str(exc)}
+
     # ── assemble results dict ─────────────────────────────────────────────────
+    # First 10 fields exactly match spec appendix H (Level 1 example).
+    # Extra L2 fields (acceptance_test, sporadic_value_rate,
+    # post_acceptance_violation_rate, relaxed_assumptions, vs_static) are
+    # additions allowed by spec §3.4 — these are documented in README/report.
     results = {
         "hard_deadline_miss_rate":       round(hard_deadline_miss_rate, 6),
         "soft_deadline_miss_rate":       round(soft_deadline_miss_rate, 6),
@@ -347,13 +383,14 @@ def main():
         "average_response_time":         round(avg_response_time, 4),
         "max_response_time":             round(max_response_time, 4),
         "completion_time_jitter":        completion_time_jitter,
-        "acceptance_test":               acceptance_test,
-        "sporadic_value_rate":           sporadic_value_rate,
-        "post_acceptance_violation_rate": round(post_acceptance_violation_rate, 6),
         "generator_cost":                round(generator_cost, 2),
         "market_revenue":                round(market_revenue, 2),
         "objective_value":               round(objective_value, 2),
+        "acceptance_test":               acceptance_test,
+        "sporadic_value_rate":           sporadic_value_rate,
+        "post_acceptance_violation_rate": round(post_acceptance_violation_rate, 6),
         "relaxed_assumptions":           relaxed_assumptions,
+        "vs_static":                     vs_static,
     }
 
     out_path = os.path.join(BASE, "output", "evaluation_results_advanced.json")
@@ -405,10 +442,12 @@ def main():
     print(f"  max_response_time:      {max_response_time:.4f} h")
 
     print(f"\n── Completion-Time Jitter (population std of response time) ──")
-    for tid in sorted(completion_time_jitter):
-        rs = response_by_task.get(tid, [])
-        print(f"  {tid}: {completion_time_jitter[tid]:.4f} h  "
-              f"(R_j: {rs})")
+    print(f"  completion_time_jitter (mean of per-task std):  "
+          f"{completion_time_jitter:.4f} h")
+    for tid in sorted(response_by_task):
+        rs = response_by_task[tid]
+        per_task = population_std(rs)
+        print(f"    {tid}: {per_task:.4f} h  (R_j: {rs})")
 
     print(f"\n── Sporadic Acceptance Test ──")
     print(f"  Total arrived:  {acceptance_test['total']}")

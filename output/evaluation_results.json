@@ -5,55 +5,15 @@
   "max_tardiness": 0,
   "average_response_time": 5.4407,
   "max_response_time": 15,
-  "completion_time_jitter": {
-    "p1": 3.8324,
-    "p2": 0.0,
-    "p3": 5.5227,
-    "p4": 3.4911,
-    "p5": 0.8749,
-    "p6": 2.0,
-    "p7": 0.0,
-    "p8": 1.6997,
-    "p9": 2.1213
-  },
+  "completion_time_jitter": 2.1713,
+  "generator_cost": 282070.0,
+  "market_revenue": 348549.4,
+  "objective_value": -66479.4,
   "acceptance_test": {
     "total": 6,
     "accepted": 5,
     "rejected": 1
   },
   "sporadic_value_rate": 0.8571428571428571,
-  "post_acceptance_violation_rate": 0.0,
-  "generator_cost": 282070.0,
-  "market_revenue": 348549.4,
-  "objective_value": -66479.4,
-  "relaxed_assumptions": {
-    "assumption": "II_Real_Storage_Operation_III_FlexibleMarket_I_RenewableUncertainty",
-    "charge_efficiency": 0.95,
-    "discharge_efficiency": 0.92,
-    "self_discharge_rate": 0.002,
-    "aging_cost_per_MWh": 8.0,
-    "total_aging_cost": 7854.4,
-    "soc_dep_discharge_binding_hours": 27,
-    "market_mechanism": {
-      "cancellation_penalty_rate": 0.3,
-      "total_day_ahead_commit_MWh": 3996.8,
-      "total_realtime_sell_MWh": 3996.8,
-      "total_cancellation_penalty": 0.0,
-      "net_market_revenue": 348549.4,
-      "realtime_price_stats": {
-        "min_factor": 0.8,
-        "max_factor": 1.39,
-        "avg_factor": 1.0244
-      }
-    },
-    "renewable_uncertainty": {
-      "forecast_error_std": 0.08,
-      "total_forecast_MWh": 1524.6,
-      "total_actual_MWh": 1527.44,
-      "total_absolute_error_MWh": 82.17,
-      "hours_with_shortfall": 37,
-      "hours_with_surplus": 38,
-      "robust_tightening_total_MWh": 121.97
-    }
-  }
+  "post_acceptance_violation_rate": 0.0
 }

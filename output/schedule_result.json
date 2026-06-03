@@ -13,10 +13,6 @@
         "battery_1": 25.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -36,10 +32,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -65,10 +57,6 @@
         "battery_1": 40.0,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -89,10 +77,6 @@
       "soc": {
         "battery_1": 45.4,
         "battery_2": 25.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -121,10 +105,6 @@
         "battery_1": 65.4,
         "battery_2": 40.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -151,10 +131,6 @@
       "soc": {
         "battery_1": 85.4,
         "battery_2": 55.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -183,10 +159,6 @@
         "battery_1": 65.4,
         "battery_2": 40.0
       },
-      "pv_forecast": {
-        "pv_1": 0.03,
-        "pv_2": 0.03
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -205,10 +177,6 @@
         "battery_1": 45.4,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -226,10 +194,6 @@
       "soc": {
         "battery_1": 25.4,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.25,
-        "pv_2": 0.25
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -263,10 +227,6 @@
         "battery_1": 45.4,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.3,
-        "pv_2": 0.3
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -297,10 +257,6 @@
       "soc": {
         "battery_1": 63.6,
         "battery_2": 40.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.23,
-        "pv_2": 0.23
       },
       "missed_aperiodic": [],
       "rejected_sporadic": [
@@ -335,10 +291,6 @@
         "battery_1": 83.6,
         "battery_2": 55.0
       },
-      "pv_forecast": {
-        "pv_1": 0.27,
-        "pv_2": 0.27
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -367,10 +319,6 @@
       "soc": {
         "battery_1": 97.4,
         "battery_2": 55.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.27,
-        "pv_2": 0.27
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -403,10 +351,6 @@
         "battery_1": 84.8,
         "battery_2": 56.0
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -435,10 +379,6 @@
         "battery_1": 65.2,
         "battery_2": 56.0
       },
-      "pv_forecast": {
-        "pv_1": 0.11,
-        "pv_2": 0.11
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -466,10 +406,6 @@
         "battery_1": 45.2,
         "battery_2": 54.4
       },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -496,10 +432,6 @@
       "soc": {
         "battery_1": 45.2,
         "battery_2": 45.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.04,
-        "pv_2": 0.04
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -529,10 +461,6 @@
         "battery_1": 59.0,
         "battery_2": 45.0
       },
-      "pv_forecast": {
-        "pv_1": 0.02,
-        "pv_2": 0.02
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -556,10 +484,6 @@
       "soc": {
         "battery_1": 74.0,
         "battery_2": 45.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -588,10 +512,6 @@
         "battery_1": 92.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -612,10 +532,6 @@
       "soc": {
         "battery_1": 72.0,
         "battery_2": 45.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -640,10 +556,6 @@
       "soc": {
         "battery_1": 52.0,
         "battery_2": 30.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -672,10 +584,6 @@
       "soc": {
         "battery_1": 32.0,
         "battery_2": 15.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -711,10 +619,6 @@
         "battery_1": 40.0,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -741,10 +645,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -773,10 +673,6 @@
         "battery_1": 40.0,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -801,10 +697,6 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -828,10 +720,6 @@
       "soc": {
         "battery_1": 40.0,
         "battery_2": 25.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -860,10 +748,6 @@
         "battery_1": 60.0,
         "battery_2": 40.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -891,10 +775,6 @@
         "battery_1": 80.0,
         "battery_2": 55.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -920,10 +800,6 @@
         "battery_1": 60.0,
         "battery_2": 40.0
       },
-      "pv_forecast": {
-        "pv_1": 0.02,
-        "pv_2": 0.02
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -946,10 +822,6 @@
         "battery_1": 40.0,
         "battery_2": 25.0
       },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -967,10 +839,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1005,10 +873,6 @@
       "soc": {
         "battery_1": 40.0,
         "battery_2": 17.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.1,
-        "pv_2": 0.1
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1047,10 +911,6 @@
         "battery_1": 60.0,
         "battery_2": 27.2
       },
-      "pv_forecast": {
-        "pv_1": 0.28,
-        "pv_2": 0.28
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1082,10 +942,6 @@
         "battery_1": 68.8,
         "battery_2": 40.2
       },
-      "pv_forecast": {
-        "pv_1": 0.12,
-        "pv_2": 0.12
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1114,10 +970,6 @@
         "battery_1": 88.8,
         "battery_2": 46.6
       },
-      "pv_forecast": {
-        "pv_1": 0.16,
-        "pv_2": 0.16
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1141,10 +993,6 @@
       "soc": {
         "battery_1": 100.0,
         "battery_2": 35.6
-      },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1172,10 +1020,6 @@
       "soc": {
         "battery_1": 89.0,
         "battery_2": 44.8
-      },
-      "pv_forecast": {
-        "pv_1": 0.13,
-        "pv_2": 0.13
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1206,10 +1050,6 @@
       "soc": {
         "battery_1": 69.0,
         "battery_2": 40.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.08,
-        "pv_2": 0.08
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1245,10 +1085,6 @@
         "battery_1": 54.0,
         "battery_2": 33.4
       },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1281,10 +1117,6 @@
       "soc": {
         "battery_1": 37.4,
         "battery_2": 33.4
-      },
-      "pv_forecast": {
-        "pv_1": 0.06,
-        "pv_2": 0.06
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1322,10 +1154,6 @@
         "battery_1": 29.8,
         "battery_2": 41.4
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1355,10 +1183,6 @@
       "soc": {
         "battery_1": 48.8,
         "battery_2": 41.4
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1390,10 +1214,6 @@
         "battery_1": 68.8,
         "battery_2": 56.4
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1409,10 +1229,6 @@
       "soc": {
         "battery_1": 48.8,
         "battery_2": 41.4
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1447,10 +1263,6 @@
         "battery_1": 64.2,
         "battery_2": 45.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1481,10 +1293,6 @@
         "battery_1": 79.2,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1508,10 +1316,6 @@
         "battery_1": 59.2,
         "battery_2": 45.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1531,10 +1335,6 @@
       "soc": {
         "battery_1": 39.2,
         "battery_2": 30.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1566,10 +1366,6 @@
         "battery_1": 59.2,
         "battery_2": 15.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1593,10 +1389,6 @@
       "soc": {
         "battery_1": 79.2,
         "battery_2": 30.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1624,10 +1416,6 @@
       "soc": {
         "battery_1": 99.2,
         "battery_2": 45.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1657,10 +1445,6 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1683,10 +1467,6 @@
       "soc": {
         "battery_1": 80.0,
         "battery_2": 45.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.14,
-        "pv_2": 0.14
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1712,10 +1492,6 @@
         "battery_1": 60.0,
         "battery_2": 30.0
       },
-      "pv_forecast": {
-        "pv_1": 0.35,
-        "pv_2": 0.35
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1735,10 +1511,6 @@
         "battery_1": 40.0,
         "battery_2": 15.0
       },
-      "pv_forecast": {
-        "pv_1": 0.57,
-        "pv_2": 0.57
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1757,10 +1529,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.8,
-        "pv_2": 0.8
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1789,10 +1557,6 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.96,
-        "pv_2": 0.96
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1819,10 +1583,6 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.98,
-        "pv_2": 0.98
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1848,10 +1608,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 1.0,
-        "pv_2": 1.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -1900,10 +1656,6 @@
         "battery_1": 40.0,
         "battery_2": 24.6
       },
-      "pv_forecast": {
-        "pv_1": 0.95,
-        "pv_2": 0.95
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1948,10 +1700,6 @@
         "battery_1": 60.0,
         "battery_2": 39.6
       },
-      "pv_forecast": {
-        "pv_1": 0.8,
-        "pv_2": 0.8
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -1987,10 +1735,6 @@
         "battery_1": 80.0,
         "battery_2": 54.6
       },
-      "pv_forecast": {
-        "pv_1": 0.6,
-        "pv_2": 0.6
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2025,10 +1769,6 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.36,
-        "pv_2": 0.36
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2061,10 +1801,6 @@
         "battery_1": 80.0,
         "battery_2": 59.0
       },
-      "pv_forecast": {
-        "pv_1": 0.12,
-        "pv_2": 0.12
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2095,10 +1831,6 @@
         "battery_1": 100.0,
         "battery_2": 60.0
       },
-      "pv_forecast": {
-        "pv_1": 0.01,
-        "pv_2": 0.01
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2120,10 +1852,6 @@
         "battery_1": 80.0,
         "battery_2": 55.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2140,10 +1868,6 @@
       "soc": {
         "battery_1": 60.0,
         "battery_2": 40.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -2169,10 +1893,6 @@
       "soc": {
         "battery_1": 40.0,
         "battery_2": 25.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
@@ -2205,10 +1925,6 @@
         "battery_1": 20.0,
         "battery_2": 10.0
       },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
-      },
       "missed_aperiodic": [],
       "rejected_sporadic": []
     },
@@ -2236,10 +1952,6 @@
       "soc": {
         "battery_1": 20.0,
         "battery_2": 10.0
-      },
-      "pv_forecast": {
-        "pv_1": 0.0,
-        "pv_2": 0.0
       },
       "missed_aperiodic": [],
       "rejected_sporadic": []
