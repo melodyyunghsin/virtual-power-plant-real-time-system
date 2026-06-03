@@ -18,7 +18,7 @@
 
 ### 1.1 產生策略
 
-採用「**目標 frame size = 4**」的隨機生成策略，搭配重試機制確保所有規格限制同時成立。實作於 `src/task_generator.py`。
+採用「**目標 frame size = 4**」的隨機生成策略，搭配重試機制確保所有限制同時成立。實作於 `src/task_generator.py`。
 
 **核心想法**: 先固定 `f = 4`，再針對每個 task 決定 `(r, p, e, d, w, preempt)` 使其滿足:
 - 個別參數範圍 (規格 1-4)
@@ -283,8 +283,6 @@ Completion-time jitter (per task):
 
 p2 與 p7 jitter 為 0 是因為 `d = e` (tight deadline), 每個 instance 都必須緊接 release time 立刻執行。
 
-**驗證**: `python3 src/verifier.py` → **驗證通過! 排程結果完美符合所有 Constraints。**
-
 ### 4.2 保留策略效能分析 (規格 6-1)
 
 #### 三層保留機制
@@ -378,8 +376,6 @@ ILP 在 minimize f2 + f3 時自動權衡:
 | sporadic_value_rate | 64.29% (9/14) |
 | 總 replan 次數 | 27 |
 
-**驗證**: `python3 src/verifier_advanced.py` → **驗證通過! 動態排程結果完美符合所有 Constraints。**
-
 #### 排程結果正確性說明 (規格 8-2)
 
 - **所有 jobs 安排結果**: 10 個 aperiodic 全部 on-time 完成、4 個 sporadic 接受 (s2、s5 因 infeasibility 拒絕)、44 個 periodic instance 全部在 deadline 前完成
@@ -418,35 +414,33 @@ L2 sporadic_value_rate 較低是「真實電池模型」帶來的結果, 而非 
 
 ### 5.1 使用 AI 輔助
 
-**使用工具**: Claude Code (Anthropic) — 整合 IDE 的 AI 編程助手
+**使用工具**: Claude Code (Anthropic)
 
-**協作方式**: 採用「迭代式 prompt + 立即測試」的協作模式:
+**協作方式**:
 
-1. **初步理解規格**: 將規格 PDF 整段提供給 AI, 請其萃取需求; 再針對不清楚的細節 (如 frame size 條件、acceptance test 流程) 追問
-2. **分階段實作**: 將整個系統拆分成 task_generator → Phase 1 ILP → online phase → advanced scheduler → evaluator / verifier 五個階段, 每階段獨立 prompt + 測試後再合併
-3. **錯誤驅動的迭代**: 每次測試找到 bug 或不合理結果 (例如 joint LP 偏好 gen 而過度增加 f2), 描述觀察到的現象, 請 AI 分析根因並修正
-4. **設計取捨討論**: 對於非單純對錯的設計選擇 (例如「sporadic 是否要策略性拒絕」、「joint LP 是否包含電池」), 先請 AI 分析利弊, 再做決定
+1. **初步理解規格**: 將規格 PDF 整段提供給 AI, 請AI萃取限制和需求等等; 再針對不清楚的細節 (如 frame size 條件、acceptance test 流程) 追問
+2. **分階段實作**: 將整個系統拆分成 task_generator → Phase 1 ILP → online phase → advanced scheduler → evaluator 五個階段, 每階段獨立 prompt ，測試後再合併
+3. **錯誤驅動的迭代**: 每次測試找到 bug 或不合理結果 (例如 joint LP 偏好 gen 而過度增加 f2), 描述觀察到的現象, 和 AI 討論、分析並修正
+4. **設計取捨討論**: 對於非單純對錯的設計選擇 (例如sporadic 是否要策略性拒絕、joint LP 是否包含電池), 先請 AI 分析利弊, 再做決定
 5. **驗證與報告**: 完成實作後請 AI 依照規格比對驗證, 並協助撰寫 README 與本份報告
 
 **Prompt 策略**:
-- **具體化問題**: 「在這個 demo input 下我看到 f2 比預期高 $20k, 原因是什麼?」優於「我的程式有 bug」
+- **具體化問題**: 細節描述如「目前sporadic_value_rate 過低, 是否因為在計算 sporadic能使用的slack時，沒計算電池?」而非「幫我提高 sporadic_value_rate」
 - **要求量化分析**: 請 AI 在做設計決策前先實際跑資料 / 算數字
-- **拒絕「就照建議做」**: 在 AI 提出修改建議時, 要求說明為什麼、有什麼權衡、什麼情況下不適用
-- **驗證輸出**: 每次重大改動都跑 `verifier.py` 與 `evaluator.py`, 不單純信任 AI 的「應該 OK」
+- **不直接接受建議**: 在 AI 提出修改建議時, 要求說明為什麼、有什麼權衡、什麼情況下不適用
+- **驗證輸出**: 每次重大改動都跑 `evaluator.py`, 不完全信任 AI 的成果
 
 ### 5.2 實作心得
 
-1. **規格的深層意義往往不在字面上**: 例如 C4 第三項規定 aperiodic 必須在 H 前執行完 `e` 小時, 這個約束讓「直接 skip aperiodic」變成違規。我們最初的版本確實有 silent skip 的 bug, 是後來透過 verifier 才發現。
+1. **規格的限制必須讀得很仔細**: 例如 C4 第三項規定 aperiodic 必須在 H 前執行完 `e` 小時, 這個約束讓「直接 skip aperiodic」變成違規。我們最初的版本確實有 silent skip 的 bug。
 
 2. **online 與 offline 視角的差別非常微妙**: Sporadic 規格上是「online 到達」, 但 demo 時所有資料是提前給的。要不要利用這個「實質知道」的優勢? 我們選擇用 lookahead-aware 的策略性拒絕, 並把這個假設明確寫進報告。
 
-3. **多個 phase 的 local optimization 不等於 global optimization**: L1 的 Phase 1 ILP 是 periodic 全域最佳, 但加上 online phase 之後, 最終的 `α·f1 + f2 + f3` 不是全域最佳。理解這一點對 demo 講解非常重要。
+3. **多個 phase 的 local optimization 不等於 global optimization**: L1 的 Phase 1 ILP 是 periodic 全域最佳, 但加上 online phase 之後, 最終的 `α·f1 + f2 + f3` 不是全域最佳。
 
-4. **L2 比 L1 「差」是正確的結果**: 一開始看到 L2 objective 比 L1 差很多時懷疑是不是有 bug。後來才理解: L2 模擬了現實的隨機性 / 損耗 / 違約成本, 這些都是 L1 沒有的。L2 比 L1 差是「越接近現實越貴」的合理現象。
+4. **L2 比 L1 差是正確的結果**: 一開始看到 L2 objective 比 L1 差很多時懷疑是不是有 bug。後來才理解 L2 模擬了 PV 隨機性 / 損耗 / 違約成本, 這些都是 L1 沒有的。L2 比 L1 差是新增的損耗造成的合理現象。
 
-5. **電池利用比想像中複雜**: 第一次 demo 時 sporadic_value_rate 只有 0.643, 原因不是演算法錯, 而是電池的 SOC 鏈 (chain) 限制過於保守 — 不允許「現在多放電、未來多充電」的補償操作。引入 SOC 補償機制 (在未來非充電時段增加 chg 並減少 sell) 後, sporadic rate 提升到 0.857。
-
-6. **驗證器是最好的朋友**: 多次發現 bug 都是靠 `verifier.py` / `verifier_advanced.py` 找到。例如 C20 違規 (PV capping 後 k 未同步調整)、C1 違規 (雙重 placement)、C16 違規 (L1 plan 餵入 L2 後 SOC 不一致), 都是驗證器先報異常, 我們才追蹤源頭。
+5. **電池利用比想像中複雜**: 第一次 demo 時 sporadic_value_rate 只有 0.643, 原因是電池的 SOC 鏈 (chain) 限制過於保守 — 不允許「現在多放電、未來多充電」的補償操作。引入 SOC 補償機制 (在未來非充電時段增加 chg 並減少 sell) 後, sporadic rate 提升到 0.857。
 
 ### 5.3 Demo 後的修正
 
@@ -475,10 +469,8 @@ L2 sporadic_value_rate 較低是「真實電池模型」帶來的結果, 而非 
 | `src/task_generator.py` | Periodic task set 隨機產生 (CLI 支援 seed 與 target_f) |
 | `src/scheduler.py` | Level 1 Phase 1 ILP + online phase (含電池 SOC 補償) |
 | `src/evaluator.py` | Level 1 評估指標計算 |
-| `src/verifier.py` | Level 1 限制式驗證 |
 | `src/advanced_scheduler.py` | Level 2 動態滾動排程 |
 | `src/evaluator_advanced.py` | Level 2 評估指標計算 |
-| `src/verifier_advanced.py` | Level 2 限制式驗證 |
 | `README.md` | 使用說明文件 |
 
 ---
